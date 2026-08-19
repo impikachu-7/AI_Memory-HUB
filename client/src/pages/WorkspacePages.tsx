@@ -90,11 +90,7 @@ function ChatPage() {
       if (match) {
         setSelectedModel(match);
       } else {
-        // Fallback to first available model if conversation doesn't have one selected yet
-        const firstActive = availableModels[0];
-        if (firstActive) {
-          setSelectedModel(firstActive);
-        }
+        setSelectedModel(null);
       }
     }
   }, [activeConvId, conversationsList, availableModels]);
@@ -111,11 +107,11 @@ function ChatPage() {
   };
 
   const handleSelectModel = async (model: ModelRead) => {
-    setSelectedModel(model);
     setModelOpen(false);
     if (activeConvId) {
       try {
         await api.conversations.update(activeConvId, { selected_model_id: model.id });
+        setSelectedModel(model);
         setConversationsList((prev) =>
           prev.map((c) => (c.id === activeConvId ? { ...c, selected_model_id: model.id } : c))
         );
@@ -143,6 +139,7 @@ function ChatPage() {
       conversation_id: activeConvId,
       role: "user",
       content: userPrompt,
+      provider: selectedModel.provider,
       model_id: selectedModel.model_key,
       created_at: new Date().toISOString(),
     };
@@ -186,7 +183,7 @@ function ChatPage() {
               {msg.role === "assistant" ? (
                 <>
                   <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-[10px] font-bold text-white">MH</span>
-                  <p className="index-label">AI Memory Hub · {msg.model_id || "Assistant"}</p>
+                  <p className="index-label">AI Memory Hub · {msg.provider ? `${msg.provider} / ` : ""}{msg.model_id || "Assistant"}</p>
                 </>
               ) : (
                 <p className="index-label">You</p>

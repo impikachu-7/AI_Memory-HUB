@@ -217,6 +217,7 @@ def generate(
             conversation_id=conversation_id,
             role='user',
             content=body.message,
+            provider=body.provider,
             model_id=body.model_key,
         ),
     )
@@ -258,6 +259,7 @@ def generate(
                     conversation_id=conversation_id,
                     role='assistant',
                     content=final_text,
+                    provider=provider_name,
                     model_id=model_key,
                 )
                 db.add(asst_msg)

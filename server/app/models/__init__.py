@@ -81,6 +81,7 @@ class Message(Timestamped, Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(50))
     model_id: Mapped[str | None] = mapped_column(String(100))
 
 

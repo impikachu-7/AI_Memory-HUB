@@ -266,6 +266,20 @@ def test_generate_rejects_model_not_in_registry():
     assert 'not available' in r.json()['detail'].lower()
 
 
+def test_generate_rejects_provider_model_mismatch():
+    token = signup('gen-provider-model-mismatch@example.com')
+    conv_id = make_conversation(token)
+    seed_model(provider='anthropic', model_key='claude-mismatch', display_name='Claude mismatch')
+    configure_provider(token, provider='openai', is_enabled=True)
+    r = client.post(
+        f'/api/v1/conversations/{conv_id}/generate',
+        headers=headers(token),
+        json={'message': 'Hi', 'provider': 'openai', 'model_key': 'claude-mismatch'},
+    )
+    assert r.status_code == 400
+    assert 'not available' in r.json()['detail'].lower()
+
+
 # ---------------------------------------------------------------------------
 # F. /generate — successful streaming and message persistence
 # ---------------------------------------------------------------------------
@@ -307,6 +321,40 @@ def test_generate_saves_user_and_assistant_messages():
     assert 'Hello world!' in contents
 
 
+def test_generate_passes_bounded_user_scoped_context_to_selected_provider():
+    token = signup('gen-context-phase7@example.com')
+    conv_id = make_conversation(token)
+    seed_model()
+    configure_provider(token)
+    client.post(
+        '/api/v1/memories',
+        headers=headers(token),
+        json={'content': 'I work at ContextCorp as an engineer.', 'category': 'Career'},
+    )
+    client.post(
+        f'/api/v1/conversations/{conv_id}/messages',
+        headers=headers(token),
+        json={'role': 'user', 'content': 'Earlier task context'},
+    )
+    mock_provider = MagicMock()
+    mock_provider.stream.return_value = iter(['Bounded response'])
+
+    with patch('app.api.routes.get_provider', return_value=mock_provider):
+        response = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'What is my engineering work?', 'provider': 'openai', 'model_key': 'gpt-4o'},
+        )
+
+    assert response.status_code == 200
+    context = mock_provider.stream.call_args.args[0]
+    assert context[0]['role'] == 'system'
+    assert 'ContextCorp' in context[0]['content']
+    assert any(message['content'] == 'Earlier task context' for message in context)
+    assert context[-1] == {'role': 'user', 'content': 'What is my engineering work?'}
+    assert len(context) <= 1 + 3 + 1
+
+
 def test_generate_assistant_message_stores_model_id():
     token = signup('gen-modelid@example.com')
     conv_id = make_conversation(token)
@@ -330,6 +378,33 @@ def test_generate_assistant_message_stores_model_id():
     db.close()
     assert asst is not None
     assert asst.model_id == 'gpt-4o'
+    assert asst.provider == 'openai'
+
+
+def test_generate_persists_selected_provider_on_user_and_assistant_messages():
+    token = signup('gen-provider-metadata@example.com')
+    conv_id = make_conversation(token)
+    seed_model(provider='anthropic', model_key='claude-phase7', display_name='Claude Phase 7')
+    configure_provider(token, provider='anthropic', api_key='anthropic-test-key', is_enabled=True)
+
+    mock_provider = MagicMock()
+    mock_provider.stream.return_value = iter(['Anthropic response'])
+
+    with patch('app.api.routes.get_provider', return_value=mock_provider):
+        response = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'Continue this task', 'provider': 'anthropic', 'model_key': 'claude-phase7'},
+        )
+
+    assert response.status_code == 200
+    db = TestingSession()
+    messages = db.scalars(select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at)).all()
+    db.close()
+    assert [(message.role, message.provider, message.model_id) for message in messages] == [
+        ('user', 'anthropic', 'claude-phase7'),
+        ('assistant', 'anthropic', 'claude-phase7'),
+    ]
 
 
 # ---------------------------------------------------------------------------

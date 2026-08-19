@@ -46,8 +46,8 @@ class ConversationUpdate(BaseModel):
     selected_model_id: str | None = None
     is_archived: bool | None = None
 class ConversationRead(ORM): id: str; title: str; selected_model_id: str | None; is_archived: bool; created_at: datetime
-class MessageCreate(BaseModel): role: str = Field(pattern="^(user|assistant|system)$"); content: str = Field(min_length=1); model_id: str | None = None
-class MessageRead(ORM): id: str; conversation_id: str; role: str; content: str; model_id: str | None; created_at: datetime
+class MessageCreate(BaseModel): role: str = Field(pattern="^(user|assistant|system)$"); content: str = Field(min_length=1); provider: str | None = None; model_id: str | None = None
+class MessageRead(ORM): id: str; conversation_id: str; role: str; content: str; provider: str | None; model_id: str | None; created_at: datetime
 MemoryCategory = Literal['Personal', 'Education', 'Career', 'Preferences', 'Projects', 'Goals', 'Skills', 'Other']
 class MemoryCreate(BaseModel):
     content: str = Field(min_length=1); category: MemoryCategory = 'Other'; source_conversation_id: str | None = None

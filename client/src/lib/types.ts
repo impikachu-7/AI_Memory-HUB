@@ -7,7 +7,7 @@ export interface ProviderSummary { id: ProviderId; name: string; connected: bool
 export interface AvailableModel { id: string; providerId: ProviderId; providerName: string; name: string; context: string; local?: boolean; }
 export interface MemoryRecord { id: string; title: string; content: string; category: string; source: string; createdAt: string; updatedAt: string; pinned?: boolean; status: MemoryStatus; }
 export interface ConversationSummary { id: string; title: string; updatedAt: string; model: string; memoryUsed: boolean; selected_model_id?: string | null; }
-export interface Message { id: string; conversation_id: string; role: "user" | "assistant" | "system"; content: string; model_id: string | null; created_at: string; }
+export interface Message { id: string; conversation_id: string; role: "user" | "assistant" | "system"; content: string; provider: string | null; model_id: string | null; created_at: string; }
 export interface ModelRead { id: string; provider: string; model_key: string; display_name: string; is_local: boolean; is_active: boolean; }
 export interface ProviderRead { id: string; provider: string; is_enabled: boolean; created_at: string; }
 export interface AnalyticsRead { conversations: number; messages: number; memories: number; }
