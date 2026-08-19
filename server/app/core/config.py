@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str | None = None
     smtp_password: str | None = None
+    chroma_path: str = "./data/chroma"
+    memory_retrieval_limit: int = 8
     log_level: str = "INFO"
 
 
