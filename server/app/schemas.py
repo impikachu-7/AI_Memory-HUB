@@ -20,6 +20,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: "UserRead | None" = None
 
 
 class UserRead(ORM):
@@ -27,6 +28,12 @@ class UserRead(ORM):
     email: EmailStr
     full_name: str | None
     is_email_verified: bool
+
+
+class OtpRequest(BaseModel): email: EmailStr
+class OtpVerifyRequest(OtpRequest): otp: str = Field(pattern=r"^\d{6}$")
+class PasswordResetRequest(BaseModel): reset_token: str; new_password: str = Field(min_length=12, max_length=128)
+class GoogleCallbackRequest(BaseModel): code: str; state: str
 
 
 class ConversationCreate(BaseModel): title: str = Field(default="New conversation", max_length=300)
