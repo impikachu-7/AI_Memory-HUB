@@ -442,6 +442,143 @@ def test_generate_provider_error_returns_safe_message_no_key_leak():
     assert 'sk-real-secret-key-xyz' not in error_events[0]['detail']
 
 
+def test_provider_failure_never_calls_another_provider_or_changes_history():
+    from fastapi import HTTPException as FHE
+
+    token = signup('phase8-no-fallback@example.com')
+    conv_id = make_conversation(token)
+    seed_model(provider='gemini', model_key='gemini-phase8-failure', display_name='Gemini Phase 8')
+    seed_model(provider='openai', model_key='openai-phase8-replacement', display_name='OpenAI Phase 8')
+    configure_provider(token, provider='gemini', api_key='gemini-phase8-key', is_enabled=True)
+    configure_provider(token, provider='openai', api_key='openai-phase8-key', is_enabled=True)
+
+    failed_provider = MagicMock()
+
+    def failed_stream(*_args, **_kwargs):
+        raise FHE(503, 'provider internal secret should not be returned')
+        yield
+
+    failed_provider.stream.side_effect = failed_stream
+    replacement_provider = MagicMock()
+
+    with patch('app.api.routes.get_provider', side_effect=lambda name: {
+        'gemini': failed_provider,
+        'openai': replacement_provider,
+    }[name]):
+        response = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'Keep this task intact', 'provider': 'gemini', 'model_key': 'gemini-phase8-failure'},
+        )
+
+    assert response.status_code == 200
+    assert failed_provider.stream.call_count == 1
+    assert replacement_provider.stream.call_count == 0
+    assert 'provider internal secret' not in response.text
+    events = [json.loads(line) for line in response.text.strip().split('\n') if line]
+    assert events[-1]['type'] == 'error'
+    assert events[-1]['provider'] == 'gemini'
+    assert events[-1]['recoverable'] is True
+    db = TestingSession()
+    persisted = db.scalars(select(Message).where(Message.conversation_id == conv_id)).all()
+    db.close()
+    assert [message.role for message in persisted] == ['user']
+    assert persisted[0].content == 'Keep this task intact'
+
+
+def test_partial_failure_preserves_previous_assistant_and_does_not_persist_incomplete_assistant():
+    from fastapi import HTTPException as FHE
+
+    token = signup('phase8-partial@example.com')
+    conv_id = make_conversation(token)
+    seed_model(provider='openai', model_key='openai-phase8-partial', display_name='OpenAI Partial')
+    configure_provider(token, provider='openai', api_key='openai-phase8-key', is_enabled=True)
+
+    success_provider = MagicMock()
+    success_provider.stream.return_value = iter(['Previous assistant'])
+    with patch('app.api.routes.get_provider', return_value=success_provider):
+        first = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'First task', 'provider': 'openai', 'model_key': 'openai-phase8-partial'},
+        )
+    assert first.status_code == 200
+
+    def partial_stream(*_args, **_kwargs):
+        yield 'Partial output'
+        raise FHE(429, 'secret rate-limit details')
+
+    partial_provider = MagicMock()
+    partial_provider.stream.side_effect = partial_stream
+    with patch('app.api.routes.get_provider', return_value=partial_provider):
+        second = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'Continue task', 'provider': 'openai', 'model_key': 'openai-phase8-partial'},
+        )
+
+    events = [json.loads(line) for line in second.text.strip().split('\n') if line]
+    assert events[0] == {'type': 'chunk', 'text': 'Partial output'}
+    assert events[-1]['type'] == 'error'
+    assert events[-1]['partial'] is True
+    assert 'secret rate-limit details' not in second.text
+    db = TestingSession()
+    persisted = db.scalars(select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at)).all()
+    db.close()
+    assert [message.content for message in persisted] == ['First task', 'Previous assistant', 'Continue task']
+    assert persisted[1].provider == 'openai'
+    assert persisted[1].model_id == 'openai-phase8-partial'
+
+
+def test_manual_model_switch_uses_same_conversation_and_preserves_history():
+    token = signup('phase8-manual-switch@example.com')
+    conv_id = make_conversation(token)
+    openai_id = seed_model(provider='openai', model_key='openai-phase8-switch', display_name='OpenAI Switch')
+    seed_model(provider='gemini', model_key='gemini-phase8-switch', display_name='Gemini Switch')
+    configure_provider(token, provider='openai', api_key='openai-phase8-key', is_enabled=True)
+    configure_provider(token, provider='gemini', api_key='gemini-phase8-key', is_enabled=True)
+
+    openai_provider = MagicMock()
+    openai_provider.stream.return_value = iter(['OpenAI response'])
+    with patch('app.api.routes.get_provider', return_value=openai_provider):
+        first = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'Build the API plan', 'provider': 'openai', 'model_key': 'openai-phase8-switch'},
+        )
+    assert first.status_code == 200
+
+    gemini_db = TestingSession()
+    gemini_id = gemini_db.scalar(select(ModelRegistry.id).where(ModelRegistry.model_key == 'gemini-phase8-switch'))
+    gemini_db.close()
+    selected = client.patch(
+        f'/api/v1/conversations/{conv_id}',
+        headers=headers(token),
+        json={'selected_model_id': gemini_id},
+    )
+    assert selected.status_code == 200
+    assert selected.json()['id'] == conv_id
+
+    gemini_provider = MagicMock()
+    gemini_provider.stream.return_value = iter(['Gemini continuation'])
+    with patch('app.api.routes.get_provider', return_value=gemini_provider):
+        second = client.post(
+            f'/api/v1/conversations/{conv_id}/generate',
+            headers=headers(token),
+            json={'message': 'Continue the same plan', 'provider': 'gemini', 'model_key': 'gemini-phase8-switch'},
+        )
+    assert second.status_code == 200
+    context = gemini_provider.stream.call_args.args[0]
+    assert any(message['content'] == 'Build the API plan' for message in context)
+    assert context[-1]['content'] == 'Continue the same plan'
+    db = TestingSession()
+    persisted = db.scalars(select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at)).all()
+    db.close()
+    assert [message.provider for message in persisted] == ['openai', 'openai', 'gemini', 'gemini']
+    assert persisted[1].model_id == 'openai-phase8-switch'
+    assert persisted[3].model_id == 'gemini-phase8-switch'
+
+
 def test_generate_rate_limit_returns_safe_error():
     from fastapi import HTTPException as FHE
     token = signup('gen-ratelimit@example.com')
@@ -780,6 +917,7 @@ def test_update_conversation_selected_model():
     token = signup('convupd-model@example.com')
     conv_id = make_conversation(token)
     model_id = seed_model(provider='openai', model_key='gpt-4o-upd', display_name='GPT-4o Update')
+    configure_provider(token, provider='openai', is_enabled=True)
 
     r = client.patch(
         f'/api/v1/conversations/{conv_id}',

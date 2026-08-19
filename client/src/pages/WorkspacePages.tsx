@@ -112,6 +112,8 @@ function ChatPage() {
       try {
         await api.conversations.update(activeConvId, { selected_model_id: model.id });
         setSelectedModel(model);
+        setErrorMsg("");
+        setDraftResponse("");
         setConversationsList((prev) =>
           prev.map((c) => (c.id === activeConvId ? { ...c, selected_model_id: model.id } : c))
         );
@@ -166,6 +168,7 @@ function ChatPage() {
       (err) => {
         setIsGenerating(false);
         setErrorMsg(err.message || "An error occurred");
+        setModelOpen(true);
       }
     );
   };
@@ -194,11 +197,11 @@ function ChatPage() {
             </div>
           </div>
         ))}
-        {isGenerating && draftResponse && (
+        {draftResponse && (isGenerating || errorMsg) && (
           <div className="mx-auto w-full max-w-[760px]">
             <div className="mb-2 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-[10px] font-bold text-white">MH</span>
-              <p className="index-label">AI Memory Hub · {selectedModel?.display_name}</p>
+              <p className="index-label">AI Memory Hub · {selectedModel?.provider} / {selectedModel?.display_name} {errorMsg && "· Incomplete"}</p>
             </div>
             <div className="rounded-2xl rounded-tl-sm border border-border bg-card p-4 text-sm leading-6 whitespace-pre-wrap">
               {draftResponse}

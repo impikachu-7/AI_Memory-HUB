@@ -142,8 +142,12 @@ def update_conversation(conversation_id: str, body: ConversationUpdate, db: Sess
         if model is None:
             raise HTTPException(400, 'Model not available')
         provider_config = db.scalar(select(ProviderConfiguration).where(ProviderConfiguration.user_id == user.id, ProviderConfiguration.provider == model.provider))
-        if provider_config is not None and not provider_config.is_enabled:
+        if provider_config is None:
+            raise HTTPException(400, 'Provider not configured')
+        if not provider_config.is_enabled:
             raise HTTPException(400, 'Provider not enabled')
+        if model.provider != 'ollama' and not provider_config.encrypted_api_key:
+            raise HTTPException(400, 'Provider credentials unavailable')
     for field, value in changes.items(): setattr(item, field, value)
     db.commit(); db.refresh(item); return item
 
@@ -242,12 +246,31 @@ def generate(
                 accumulated.append(chunk)
                 yield json.dumps({'type': 'chunk', 'text': chunk}) + '\n'
         except HTTPException as exc:
-            # Safe: detail string never contains key
-            yield json.dumps({'type': 'error', 'detail': exc.detail}) + '\n'
+            safe_details = {
+                401: f'{provider_name} credentials were rejected.',
+                429: f'{provider_name} is rate limited.',
+                503: f'{provider_name} is temporarily unavailable.',
+            }
+            detail = safe_details.get(exc.status_code, 'The selected model could not complete this request.')
+            yield json.dumps({
+                'type': 'error',
+                'detail': detail,
+                'provider': provider_name,
+                'model_key': model_key,
+                'recoverable': True,
+                'partial': bool(accumulated),
+            }) + '\n'
             return
         except Exception:
             log.exception("Unexpected error during streaming for provider=%s", provider_name)
-            yield json.dumps({'type': 'error', 'detail': 'An unexpected error occurred'}) + '\n'
+            yield json.dumps({
+                'type': 'error',
+                'detail': 'The selected model could not complete this request.',
+                'provider': provider_name,
+                'model_key': model_key,
+                'recoverable': True,
+                'partial': bool(accumulated),
+            }) + '\n'
             return
 
         # Save completed assistant message and run extraction on success
