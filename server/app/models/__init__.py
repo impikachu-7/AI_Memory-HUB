@@ -89,9 +89,12 @@ class Memory(Timestamped, Base):
     id: Mapped[str] = uuid_pk()
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    category: Mapped[str | None] = mapped_column(String(100), index=True)
+    category: Mapped[str] = mapped_column(String(100), default="Other", index=True, nullable=False)
     source_conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"))
+    importance: Mapped[float] = mapped_column(default=0.5, nullable=False)
+    confidence: Mapped[float] = mapped_column(default=0.7, nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
 
 
