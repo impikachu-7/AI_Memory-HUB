@@ -20,7 +20,8 @@ def is_expired(value: datetime) -> bool:
 def issue_otp(db: Session, user: User, purpose: str) -> None:
     settings = get_settings()
     latest = db.scalar(select(AuthOtp).where(AuthOtp.user_id == user.id, AuthOtp.purpose == purpose, AuthOtp.used_at.is_(None)).order_by(AuthOtp.sent_at.desc()))
-    if latest and (now() - latest.sent_at).total_seconds() < settings.otp_resend_cooldown_seconds:
+    sent_at = latest.sent_at.replace(tzinfo=UTC) if latest and latest.sent_at.tzinfo is None else (latest.sent_at if latest else None)
+    if latest and (now() - sent_at).total_seconds() < settings.otp_resend_cooldown_seconds:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Please wait before requesting another code")
     db.execute(update(AuthOtp).where(AuthOtp.user_id == user.id, AuthOtp.purpose == purpose, AuthOtp.used_at.is_(None)).values(used_at=now()))
     code = generate_otp()
