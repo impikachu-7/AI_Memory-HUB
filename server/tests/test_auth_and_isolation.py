@@ -95,3 +95,26 @@ def test_google_token_validation_rejects_unverifiable_tokens():
     except Exception as exc: assert getattr(exc, 'status_code', 0) in {401, 503}
     else: raise AssertionError('Invalid token was accepted')
 
+def test_profile_update_is_user_scoped():
+    token = signup('profile-phase6@example.com')
+    response = client.patch('/api/v1/users/me', headers=headers(token), json={'full_name': 'Updated Name'})
+    assert response.status_code == 200
+    assert response.json()['full_name'] == 'Updated Name'
+
+def test_exports_are_user_scoped_and_exclude_provider_secrets():
+    alice = signup('export-alice@example.com')
+    bob = signup('export-bob@example.com')
+    client.post('/api/v1/memories', headers=headers(alice), json={'content': 'Alice private export memory'})
+    client.post('/api/v1/memories', headers=headers(bob), json={'content': 'Bob private export memory'})
+    client.post('/api/v1/providers', headers=headers(alice), json={'provider': 'openai', 'api_key': 'alice-secret-key', 'is_enabled': True})
+
+    memories = client.get('/api/v1/privacy/export/memories', headers=headers(alice))
+    conversations = client.get('/api/v1/privacy/export/conversations', headers=headers(alice))
+    combined = client.get('/api/v1/privacy/export', headers=headers(alice))
+    assert memories.status_code == conversations.status_code == combined.status_code == 200
+    assert 'Alice private export memory' in str(memories.json())
+    assert 'Bob private export memory' not in str(memories.json())
+    assert 'alice-secret-key' not in combined.text
+    assert 'encrypted_api_key' not in combined.text
+    assert 'password_hash' not in combined.text
+

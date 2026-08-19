@@ -1,6 +1,7 @@
 /** Quiet Intelligence Console shell: a three-zone workbench with an anchored location rail and calm primary canvas. */
 
 import { BrandLockup } from "@/components/BrandMark";
+import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +13,7 @@ import {
   Command,
   KeyRound,
   LayoutDashboard,
+  LogOut,
   Menu,
   MessageSquareText,
   PanelLeftClose,
@@ -76,6 +78,7 @@ export function AppShell({
   action?: React.ReactNode;
 }) {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -116,11 +119,15 @@ export function AppShell({
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--memory-teal)] text-xs font-bold text-white">AM</span>
           {!collapsed && (
             <span className="min-w-0">
-              <span className="block truncate text-[13px] font-semibold">Alex Morgan</span>
+              <span className="block truncate text-[13px] font-semibold">{user?.full_name || user?.email || "Workspace"}</span>
               <span className="block truncate text-[11px] text-muted-foreground">Personal workspace</span>
             </span>
           )}
         </Link>
+        <button onClick={() => { void logout(); }} className={cn("mt-1 flex w-full items-center gap-3 rounded-xl p-2.5 text-muted-foreground transition hover:bg-secondary hover:text-foreground", collapsed && "justify-center")} title="Sign out">
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span className="text-xs font-semibold">Sign out</span>}
+        </button>
       </div>
     </aside>
   );

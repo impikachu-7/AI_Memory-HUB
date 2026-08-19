@@ -18,6 +18,7 @@ from app.services.oauth import exchange_google_code, google_authorization_url
 from app.services.memory_engine import extract_from_conversation, retrieve, vector_store
 from app.services.llm import get_provider
 from app.services.llm import context_builder
+from app.services.data_export import export_conversations, export_memories, export_user_data
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +123,12 @@ def google_callback(body: GoogleCallbackRequest, db: Session = Depends(get_db)):
 @router.get('/users/me', response_model=UserRead)
 def me(user: User = Depends(current_user)): return user
 
+@router.patch('/users/me', response_model=UserRead)
+def update_me(body: ProfileUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    user.full_name = body.full_name
+    db.commit(); db.refresh(user)
+    return user
+
 @router.get('/conversations', response_model=list[ConversationRead])
 def list_conversations(db: Session = Depends(get_db), user: User = Depends(current_user)): return conversations.list(db, user.id)
 @router.post('/conversations', response_model=ConversationRead, status_code=201)
@@ -129,7 +136,15 @@ def create_conversation(body: ConversationCreate, db: Session = Depends(get_db),
 @router.patch('/conversations/{conversation_id}', response_model=ConversationRead)
 def update_conversation(conversation_id: str, body: ConversationUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = conversations.get(db, user.id, conversation_id)
-    for field, value in body.model_dump(exclude_unset=True).items(): setattr(item, field, value)
+    changes = body.model_dump(exclude_unset=True)
+    if 'selected_model_id' in changes and changes['selected_model_id'] is not None:
+        model = db.scalar(select(ModelRegistry).where(ModelRegistry.id == changes['selected_model_id'], ModelRegistry.is_active.is_(True)))
+        if model is None:
+            raise HTTPException(400, 'Model not available')
+        provider_config = db.scalar(select(ProviderConfiguration).where(ProviderConfiguration.user_id == user.id, ProviderConfiguration.provider == model.provider))
+        if provider_config is not None and not provider_config.is_enabled:
+            raise HTTPException(400, 'Provider not enabled')
+    for field, value in changes.items(): setattr(item, field, value)
     db.commit(); db.refresh(item); return item
 
 @router.get('/conversations/{conversation_id}/messages', response_model=list[MessageRead])
@@ -392,4 +407,12 @@ def analytics(db: Session = Depends(get_db), user: User = Depends(current_user))
 
 @router.get('/privacy/export')
 def privacy_export(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return {"user": UserRead.model_validate(user), "conversations": conversations.list(db, user.id), "memories": memories.list(db, user.id)}
+    return export_user_data(db, user)
+
+@router.get('/privacy/export/memories')
+def privacy_export_memories(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return export_memories(db, user.id)
+
+@router.get('/privacy/export/conversations')
+def privacy_export_conversations(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return export_conversations(db, user.id)

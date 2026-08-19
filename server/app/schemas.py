@@ -30,6 +30,9 @@ class UserRead(ORM):
     full_name: str | None
     is_email_verified: bool
 
+class ProfileUpdate(BaseModel):
+    full_name: str | None = Field(default=None, max_length=200)
+
 
 class OtpRequest(BaseModel): email: EmailStr
 class OtpVerifyRequest(OtpRequest): otp: str = Field(pattern=r"^\d{6}$")

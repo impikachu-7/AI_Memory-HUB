@@ -7,7 +7,7 @@ from app.core.config import get_settings
 
 logging.basicConfig(level=get_settings().log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 app = FastAPI(title="AI Memory Hub API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in get_settings().frontend_origins.split(',') if origin.strip()], allow_credentials=True, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in get_settings().frontend_origins.split(',') if origin.strip()], allow_credentials=True, allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"], allow_headers=["Authorization", "Content-Type"])
 app.include_router(router, prefix="/api/v1")
 
 @app.exception_handler(Exception)

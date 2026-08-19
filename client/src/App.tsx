@@ -9,6 +9,7 @@ import LandingPage from "@/pages/LandingPage";
 import NotFound from "@/pages/NotFound";
 import { WorkspaceRoute } from "@/pages/WorkspacePages";
 import { Route, Switch } from "wouter";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 function Router() {
   return (
@@ -39,5 +40,5 @@ function Router() {
 }
 
 export default function App() {
-  return <ErrorBoundary><ThemeProvider defaultTheme="light" switchable><TooltipProvider><Toaster richColors position="top-right" /><Router /></TooltipProvider></ThemeProvider></ErrorBoundary>;
+  return <ErrorBoundary><ThemeProvider defaultTheme="light" switchable><AuthProvider><TooltipProvider><Toaster richColors position="top-right" /><Router /></TooltipProvider></AuthProvider></ThemeProvider></ErrorBoundary>;
 }
