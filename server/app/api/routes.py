@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
+import json
+import logging
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.core.security import decode_access_token, hash_password, verify_password
@@ -10,9 +13,13 @@ from app.models import Conversation, Memory, Message, ModelRegistry, OAuthIdenti
 from app.repositories.owned import OwnedRepository
 from app.schemas import *
 from app.services.auth import clear_login_failures, consume_otp, create_session, issue_otp, login_allowed, record_login_failure, revoke_all_sessions, revoke_session
-from app.services.credentials import encrypt_api_key
+from app.services.credentials import decrypt_api_key, encrypt_api_key
 from app.services.oauth import exchange_google_code, google_authorization_url
 from app.services.memory_engine import extract_from_conversation, retrieve, vector_store
+from app.services.llm import get_provider
+from app.services.llm import context_builder
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 conversations, messages, memories, providers = (OwnedRepository(x) for x in (Conversation, Message, Memory, ProviderConfiguration))
@@ -119,6 +126,11 @@ def me(user: User = Depends(current_user)): return user
 def list_conversations(db: Session = Depends(get_db), user: User = Depends(current_user)): return conversations.list(db, user.id)
 @router.post('/conversations', response_model=ConversationRead, status_code=201)
 def create_conversation(body: ConversationCreate, db: Session = Depends(get_db), user: User = Depends(current_user)): return conversations.create(db, Conversation(user_id=user.id, title=body.title))
+@router.patch('/conversations/{conversation_id}', response_model=ConversationRead)
+def update_conversation(conversation_id: str, body: ConversationUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = conversations.get(db, user.id, conversation_id)
+    for field, value in body.model_dump(exclude_unset=True).items(): setattr(item, field, value)
+    db.commit(); db.refresh(item); return item
 
 @router.get('/conversations/{conversation_id}/messages', response_model=list[MessageRead])
 def list_messages(conversation_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
@@ -131,6 +143,124 @@ def create_message(conversation_id: str, body: MessageCreate, db: Session = Depe
 def extract_memories(conversation_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     conversations.get(db, user.id, conversation_id)
     return extract_from_conversation(db, user.id, conversation_id)
+
+# ---------------------------------------------------------------------------
+# Phase 5 — LLM generation endpoint
+# ---------------------------------------------------------------------------
+
+@router.post('/conversations/{conversation_id}/generate')
+def generate(
+    conversation_id: str,
+    body: GenerateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """Stream an LLM response into the conversation.
+
+    Pipeline:
+    1. Verify conversation ownership.
+    2. Verify the user has an *enabled* ProviderConfiguration for body.provider.
+    3. Verify body.model_key exists in ModelRegistry for body.provider.
+    4. Save the user message.
+    5. Build context (relevant memories + recent history).
+    6. Decrypt key immediately before calling the provider.
+    7. Stream response chunks as newline-delimited JSON.
+    8. On completion: save assistant message, run memory extraction.
+    9. On error: emit safe JSON error chunk — never expose the key.
+    """
+    # 1. Conversation ownership
+    conversations.get(db, user.id, conversation_id)
+
+    # 2. Provider config — must exist and be enabled
+    config = db.scalar(
+        select(ProviderConfiguration).where(
+            ProviderConfiguration.user_id == user.id,
+            ProviderConfiguration.provider == body.provider,
+        )
+    )
+    if config is None:
+        raise HTTPException(400, 'Provider not configured')
+    if not config.is_enabled:
+        raise HTTPException(400, 'Provider not enabled')
+
+    # 3. Model must exist in registry for this provider
+    model_entry = db.scalar(
+        select(ModelRegistry).where(
+            ModelRegistry.provider == body.provider,
+            ModelRegistry.model_key == body.model_key,
+            ModelRegistry.is_active.is_(True),
+        )
+    )
+    if model_entry is None:
+        raise HTTPException(400, 'Model not available')
+
+    # 4. Save user message
+    user_msg = messages.create(
+        db,
+        Message(
+            user_id=user.id,
+            conversation_id=conversation_id,
+            role='user',
+            content=body.message,
+            model_id=body.model_key,
+        ),
+    )
+
+    # 5. Build context (captures db state before streaming begins)
+    llm_messages = context_builder.build(db, user.id, conversation_id, body.message)
+
+    # 6. Capture encrypted key — decryption happens inside the generator
+    encrypted_key = config.encrypted_api_key
+
+    provider_name = body.provider
+    model_key = body.model_key
+    user_id = user.id
+
+    def event_stream():
+        accumulated = []
+        try:
+            provider = get_provider(provider_name)
+            # Decrypt immediately before use; result is local to this generator
+            api_key = decrypt_api_key(encrypted_key) if encrypted_key else None
+            for chunk in provider.stream(llm_messages, api_key, model_key):
+                accumulated.append(chunk)
+                yield json.dumps({'type': 'chunk', 'text': chunk}) + '\n'
+        except HTTPException as exc:
+            # Safe: detail string never contains key
+            yield json.dumps({'type': 'error', 'detail': exc.detail}) + '\n'
+            return
+        except Exception:
+            log.exception("Unexpected error during streaming for provider=%s", provider_name)
+            yield json.dumps({'type': 'error', 'detail': 'An unexpected error occurred'}) + '\n'
+            return
+
+        # Save completed assistant message and run extraction on success
+        final_text = ''.join(accumulated)
+        if final_text:
+            try:
+                asst_msg = Message(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    role='assistant',
+                    content=final_text,
+                    model_id=model_key,
+                )
+                db.add(asst_msg)
+                db.commit()
+                db.refresh(asst_msg)
+                # Run existing memory extraction heuristic
+                extract_from_conversation(db, user_id, conversation_id)
+                yield json.dumps({'type': 'done', 'message_id': asst_msg.id}) + '\n'
+            except Exception:
+                log.exception("Failed to persist assistant message")
+                yield json.dumps({'type': 'error', 'detail': 'Failed to save response'}) + '\n'
+
+    return StreamingResponse(event_stream(), media_type='application/x-ndjson')
+
+
+# ---------------------------------------------------------------------------
+# Provider management
+# ---------------------------------------------------------------------------
 
 @router.get('/memories', response_model=list[MemoryRead])
 def list_memories(db: Session = Depends(get_db), user: User = Depends(current_user)): return memories.list(db, user.id)
@@ -168,14 +298,92 @@ def search_memories(query: str, limit: int = 8, db: Session = Depends(get_db), u
 
 @router.get('/providers', response_model=list[ProviderRead])
 def list_providers(db: Session = Depends(get_db), user: User = Depends(current_user)): return providers.list(db, user.id)
+
 @router.post('/providers', response_model=ProviderRead, status_code=201)
 def configure_provider(body: ProviderCreate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     existing = db.scalar(select(ProviderConfiguration).where(ProviderConfiguration.user_id == user.id, ProviderConfiguration.provider == body.provider))
     if existing: raise HTTPException(409, 'Provider already configured')
     return providers.create(db, ProviderConfiguration(user_id=user.id, provider=body.provider, encrypted_api_key=encrypt_api_key(body.api_key) if body.api_key else None, is_enabled=body.is_enabled))
 
+@router.put('/providers/{provider_name}', response_model=ProviderRead)
+def update_provider(provider_name: str, body: ProviderUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Update API key and/or enabled state for an existing provider configuration."""
+    config = db.scalar(
+        select(ProviderConfiguration).where(
+            ProviderConfiguration.user_id == user.id,
+            ProviderConfiguration.provider == provider_name,
+        )
+    )
+    if config is None:
+        raise HTTPException(404, 'Provider not configured')
+    if body.api_key is not None:
+        config.encrypted_api_key = encrypt_api_key(body.api_key)
+    if body.is_enabled is not None:
+        config.is_enabled = body.is_enabled
+    db.commit()
+    db.refresh(config)
+    return config
+
+@router.delete('/providers/{provider_name}', status_code=204)
+def delete_provider(provider_name: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Remove a provider configuration for the authenticated user."""
+    config = db.scalar(
+        select(ProviderConfiguration).where(
+            ProviderConfiguration.user_id == user.id,
+            ProviderConfiguration.provider == provider_name,
+        )
+    )
+    if config is None:
+        raise HTTPException(404, 'Provider not configured')
+    db.delete(config)
+    db.commit()
+
+@router.get('/providers/{provider_name}/models', response_model=list[ProviderModelRead])
+def list_provider_models(provider_name: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """List live models available from the provider.
+
+    Requires the authenticated user to have a ProviderConfiguration row for this
+    provider (enabled or not).  Decrypts the key immediately before the call;
+    never returns it.
+    """
+    config = db.scalar(
+        select(ProviderConfiguration).where(
+            ProviderConfiguration.user_id == user.id,
+            ProviderConfiguration.provider == provider_name,
+        )
+    )
+    if config is None:
+        raise HTTPException(404, 'Provider not configured')
+    provider = get_provider(provider_name)
+    # Decrypt key only for the duration of this call; never stored or returned
+    api_key = decrypt_api_key(config.encrypted_api_key) if config.encrypted_api_key else None
+    raw_models = provider.list_models(api_key)
+    return [ProviderModelRead(**m) for m in raw_models]
+
+# ---------------------------------------------------------------------------
+# GET /models — filtered by the user's enabled ProviderConfiguration rows
+# Security: backend is the authoritative gate; frontend filter is UX only.
+# ---------------------------------------------------------------------------
+
 @router.get('/models', response_model=list[ModelRead])
-def list_models(db: Session = Depends(get_db), user: User = Depends(current_user)): return list(db.scalars(select(ModelRegistry).where(ModelRegistry.is_active.is_(True))))
+def list_models(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Return ModelRegistry rows only for providers the user has enabled."""
+    enabled_providers = db.scalars(
+        select(ProviderConfiguration.provider).where(
+            ProviderConfiguration.user_id == user.id,
+            ProviderConfiguration.is_enabled.is_(True),
+        )
+    ).all()
+    if not enabled_providers:
+        return []
+    return list(
+        db.scalars(
+            select(ModelRegistry).where(
+                ModelRegistry.is_active.is_(True),
+                ModelRegistry.provider.in_(enabled_providers),
+            )
+        )
+    )
 
 @router.get('/analytics', response_model=AnalyticsRead)
 def analytics(db: Session = Depends(get_db), user: User = Depends(current_user)):
@@ -185,4 +393,3 @@ def analytics(db: Session = Depends(get_db), user: User = Depends(current_user))
 @router.get('/privacy/export')
 def privacy_export(db: Session = Depends(get_db), user: User = Depends(current_user)):
     return {"user": UserRead.model_validate(user), "conversations": conversations.list(db, user.id), "memories": memories.list(db, user.id)}
-

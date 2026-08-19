@@ -38,6 +38,10 @@ class GoogleCallbackRequest(BaseModel): code: str; state: str
 
 
 class ConversationCreate(BaseModel): title: str = Field(default="New conversation", max_length=300)
+class ConversationUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=300)
+    selected_model_id: str | None = None
+    is_archived: bool | None = None
 class ConversationRead(ORM): id: str; title: str; selected_model_id: str | None; is_archived: bool; created_at: datetime
 class MessageCreate(BaseModel): role: str = Field(pattern="^(user|assistant|system)$"); content: str = Field(min_length=1); model_id: str | None = None
 class MessageRead(ORM): id: str; conversation_id: str; role: str; content: str; model_id: str | None; created_at: datetime
@@ -55,4 +59,21 @@ class ProviderCreate(BaseModel): provider: str = Field(pattern="^(openai|gemini|
 class ProviderRead(ORM): id: str; provider: str; is_enabled: bool; created_at: datetime
 class ModelRead(ORM): id: str; provider: str; model_key: str; display_name: str; is_local: bool; is_active: bool
 class AnalyticsRead(BaseModel): conversations: int; messages: int; memories: int
+
+# Phase 5 — generation schemas
+class GenerateRequest(BaseModel):
+    message: str = Field(min_length=1)
+    provider: str = Field(pattern="^(openai|gemini|anthropic|deepseek|groq|openrouter|ollama)$")
+    model_key: str = Field(min_length=1)
+
+class ProviderUpdate(BaseModel):
+    api_key: str | None = Field(default=None, min_length=8)
+    is_enabled: bool | None = None
+
+class ProviderModelRead(BaseModel):
+    model_key: str
+    display_name: str
+    context_length: int | None = None
+    is_local: bool = False
+
 

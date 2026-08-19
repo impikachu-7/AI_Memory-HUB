@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     chroma_path: str = "./data/chroma"
     memory_retrieval_limit: int = 8
+    ollama_base_url: str = "http://localhost:11434"
+    chat_history_limit: int = 20
     log_level: str = "INFO"
 
 

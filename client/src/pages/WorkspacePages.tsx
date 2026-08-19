@@ -7,7 +7,7 @@ import { api } from "@/services/api";
 import {
   Archive, ArrowDownToLine, ArrowRight, BarChart3, Bell, Bot, BrainCircuit, CalendarClock, Check, ChevronDown, ChevronsUpDown, CircleAlert, Clock3, Copy, Download, Edit3, Ellipsis, ExternalLink, FileText, Filter, FolderOpen, Gauge, Globe2, KeyRound, LayoutDashboard, LockKeyhole, Mail, MessageSquareText, MoreHorizontal, Network, PanelRightClose, Pencil, Pin, Plus, RefreshCw, Search, SendHorizontal, Settings2, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Tags, Trash2, Undo2, UserRound, X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
@@ -43,15 +43,179 @@ function StatCard({ label, value, detail, icon: Icon, trend }: { label: string; 
 
 function ChatPage() {
   const [modelOpen, setModelOpen] = useState(false);
-  const [selected, setSelected] = useState(activeModel);
-  const [message, setMessage] = useState("");
-  const send = () => { if (!message.trim()) return; backendToast("Sending a message"); setMessage(""); };
-  return <AppShell title="AI Chat" eyebrow="Workspace" action={<NewConversationButton onClick={() => api.conversations.create().catch(() => backendToast("Creating a conversation"))} />}><div className="mx-auto grid max-w-[1530px] gap-5 xl:grid-cols-[270px_minmax(0,1fr)_240px]">
-    <Panel className="hidden overflow-hidden xl:block"><div className="border-b border-border p-4"><button className="flex h-9 w-full items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs text-muted-foreground"><Search className="h-3.5 w-3.5" /> Search conversations</button></div><div className="p-2"><p className="index-label px-3 pb-2 pt-2">Recent</p>{conversations.map((conversation, index) => <button key={conversation.id} className={cn("w-full rounded-xl p-3 text-left transition hover:bg-secondary", index === 0 && "bg-[color:color-mix(in_oklab,var(--memory-teal)_7%,transparent)]")}><p className="truncate text-xs font-bold">{conversation.title}</p><div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground"><span>{conversation.updatedAt}</span>{conversation.memoryUsed && <BrainCircuit className="h-3 w-3 text-[color:var(--memory-teal)]" />}</div></button>)}</div></Panel>
-    <Panel className="flex min-h-[680px] flex-col overflow-hidden"><div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div><p className="text-sm font-bold">Planning the knowledge system</p><div className="mt-1 flex items-center gap-2"><Pill tone="teal"><BrainCircuit className="h-3 w-3" /> 3 memories retrieved</Pill><span className="text-[10px] text-muted-foreground">Context stays with this conversation</span></div></div><div className="relative"><button onClick={() => setModelOpen((value) => !value)} className="inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs font-bold transition hover:bg-secondary"><span className="h-2 w-2 rounded-full bg-[color:var(--memory-teal)]" />{selected.name}<ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /></button>{modelOpen && <div className="absolute right-0 z-20 mt-2 w-[280px] rounded-2xl border border-border bg-popover p-2 text-popover-foreground shadow-xl"><p className="index-label px-3 py-2">Available for you</p>{availableModels.map((model) => <button key={model.id} onClick={() => { setSelected(model); setModelOpen(false); api.models.select(model.id).catch(() => backendToast("Changing the selected model")); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition hover:bg-secondary", selected.id === model.id && "bg-[color:color-mix(in_oklab,var(--memory-teal)_8%,transparent)]")}><span><span className="block text-xs font-bold">{model.name}</span><span className="mt-1 block text-[10px] text-muted-foreground">{model.providerName} · {model.context}</span></span>{selected.id === model.id && <Check className="h-4 w-4 text-[color:var(--memory-teal)]" />}</button>)}</div>}</div></div>
-      <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-4 sm:p-6"><div className="mx-auto w-full max-w-[760px]"><p className="index-label mb-2">You</p><div className="rounded-2xl rounded-tl-sm bg-secondary p-4 text-sm leading-6">Help me organize the product rules for a universal AI memory platform. Keep the distinction between conversation history and long-term memory very clear.</div></div><div className="mx-auto w-full max-w-[760px]"><div className="mb-2 flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-[10px] font-bold text-white">MH</span><p className="index-label">AI Memory Hub · {selected.name}</p></div><div className="rounded-2xl rounded-tl-sm border border-border bg-card p-4 text-sm leading-6"><p>Here is a durable split for the product:</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-[color:var(--surface-warm)] p-3"><p className="text-xs font-bold">Conversation history</p><p className="mt-1 text-xs leading-5 text-muted-foreground">The full chronological record: messages, attachments, responses, and model events.</p></div><div className="rounded-xl border border-[color:color-mix(in_oklab,var(--memory-teal)_22%,transparent)] bg-[color:color-mix(in_oklab,var(--memory-teal)_6%,transparent)] p-3"><p className="text-xs font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Long-term memory</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Deliberately extracted, editable facts and preferences that can be retrieved for future work.</p></div></div><p className="mt-4">The user owns both layers. The model only receives the scoped context they choose to make available for the active task.</p><span className="mt-3 inline-flex items-center gap-2 text-xs text-muted-foreground">Drafting response <span className="inline-flex gap-1"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--memory-teal)]" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--memory-teal)] [animation-delay:150ms]" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--memory-teal)] [animation-delay:300ms]" /></span></span></div><div className="mt-2 flex items-center gap-1"><IconButton label="Copy response" onClick={() => navigator.clipboard?.writeText("Conversation history and long-term memory remain distinct.").then(() => toast.success("Response copied"))}><Copy className="h-3.5 w-3.5" /></IconButton><IconButton label="Regenerate response" onClick={() => backendToast("Regenerating a response")}><RefreshCw className="h-3.5 w-3.5" /></IconButton><IconButton label="Continue response" onClick={() => backendToast("Continuing a response")}><ArrowRight className="h-3.5 w-3.5" /></IconButton></div></div></div>
-      <div className="border-t border-border p-3 sm:p-4"><div className="mx-auto max-w-[760px] rounded-2xl border border-border bg-background p-2 focus-within:border-[color:var(--memory-teal)] focus-within:ring-4 focus-within:ring-[color:color-mix(in_oklab,var(--memory-teal)_10%,transparent)]"><textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} rows={2} placeholder="Ask with your current memory context…" className="w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground" /><div className="flex items-center justify-between px-1"><Pill tone="teal"><BrainCircuit className="h-3 w-3" /> Memory on</Pill><button onClick={send} className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-white transition hover:bg-[color:var(--memory-teal-deep)] active:scale-[0.97]" aria-label="Send message"><SendHorizontal className="h-3.5 w-3.5" /></button></div></div></div></Panel>
-    <div className="hidden space-y-4 xl:block"><Panel className="p-4"><IndexLabel>Retrieved memory</IndexLabel><p className="mt-3 text-xs font-bold">Writing preference</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Concise, structured explanations with a clear next action.</p><Link href="/memory/m_104" className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">View memory <ArrowRight className="h-3 w-3" /></Link></Panel><Panel className="p-4"><IndexLabel>Session integrity</IndexLabel><div className="mt-3 flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[color:var(--memory-teal)]" /><p className="text-xs font-bold">Model switch is explicit</p></div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Changing a model does not silently alter your selected conversation context.</p></Panel></div>
+  const [conversationsList, setConversationsList] = useState<ConversationSummary[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [messagesList, setMessagesList] = useState<Message[]>([]);
+  const [availableModels, setAvailableModels] = useState<ModelRead[]>([]);
+  const [selectedModel, setSelectedModel] = useState<ModelRead | null>(null);
+  const [messageText, setMessageText] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [draftResponse, setDraftResponse] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const activeConversation = conversationsList.find((c) => c.id === activeConvId);
+
+  // Load initial data: conversations and registry models (filtered by enabled providers server-side)
+  useEffect(() => {
+    Promise.all([api.conversations.list(), api.models.listRegistry()])
+      .then(([convs, mods]) => {
+        setConversationsList(convs);
+        setAvailableModels(mods);
+        if (convs.length > 0) {
+          setActiveConvId(convs[0].id);
+        }
+      })
+      .catch(() => {
+        toast.error("Failed to load workspace data");
+      });
+  }, []);
+
+  // Fetch messages and select correct model when active conversation changes
+  useEffect(() => {
+    if (!activeConvId) return;
+    api.conversations
+      .listMessages(activeConvId)
+      .then((msgs) => {
+        setMessagesList(msgs);
+        setErrorMsg("");
+      })
+      .catch(() => {
+        toast.error("Failed to load messages");
+      });
+
+    const activeConv = conversationsList.find((c) => c.id === activeConvId);
+    if (activeConv && availableModels.length > 0) {
+      const match = availableModels.find((m) => m.id === activeConv.selected_model_id);
+      if (match) {
+        setSelectedModel(match);
+      } else {
+        // Fallback to first available model if conversation doesn't have one selected yet
+        const firstActive = availableModels[0];
+        if (firstActive) {
+          setSelectedModel(firstActive);
+        }
+      }
+    }
+  }, [activeConvId, conversationsList, availableModels]);
+
+  const handleNewConversation = async () => {
+    try {
+      const newConv = await api.conversations.create();
+      setConversationsList((prev) => [newConv, ...prev]);
+      setActiveConvId(newConv.id);
+      setMessagesList([]);
+    } catch {
+      toast.error("Failed to create conversation");
+    }
+  };
+
+  const handleSelectModel = async (model: ModelRead) => {
+    setSelectedModel(model);
+    setModelOpen(false);
+    if (activeConvId) {
+      try {
+        await api.conversations.update(activeConvId, { selected_model_id: model.id });
+        setConversationsList((prev) =>
+          prev.map((c) => (c.id === activeConvId ? { ...c, selected_model_id: model.id } : c))
+        );
+      } catch {
+        toast.error("Failed to update selected model");
+      }
+    }
+  };
+
+  const send = () => {
+    if (!messageText.trim() || !activeConvId || isGenerating) return;
+    if (!selectedModel) {
+      toast.error("Please select a model first (ensure a provider is connected and enabled)");
+      return;
+    }
+    const userPrompt = messageText;
+    setMessageText("");
+    setErrorMsg("");
+    setIsGenerating(true);
+    setDraftResponse("");
+
+    // Optimistically append user message
+    const userMsg: Message = {
+      id: Math.random().toString(),
+      role: "user",
+      content: userPrompt,
+      model_id: selectedModel.model_key,
+      created_at: new Date().toISOString(),
+    };
+    setMessagesList((prev) => [...prev, userMsg]);
+
+    const req = {
+      message: userPrompt,
+      provider: selectedModel.provider,
+      model_key: selectedModel.model_key,
+    };
+
+    api.conversations.generate(
+      activeConvId,
+      req,
+      (chunk) => {
+        setDraftResponse((prev) => prev + chunk);
+      },
+      () => {
+        setIsGenerating(false);
+        setDraftResponse("");
+        // Reload messages to get finalized server state
+        api.conversations.listMessages(activeConvId).then(setMessagesList);
+      },
+      (err) => {
+        setIsGenerating(false);
+        setErrorMsg(err.message || "An error occurred");
+      }
+    );
+  };
+
+  return <AppShell title="AI Chat" eyebrow="Workspace" action={<NewConversationButton onClick={handleNewConversation} />}><div className="mx-auto grid max-w-[1530px] gap-5 xl:grid-cols-[270px_minmax(0,1fr)_240px]">
+    <Panel className="hidden overflow-hidden xl:block"><div className="border-b border-border p-4"><button className="flex h-9 w-full items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs text-muted-foreground"><Search className="h-3.5 w-3.5" /> Search conversations</button></div><div className="p-2"><p className="index-label px-3 pb-2 pt-2">Recent</p>{conversationsList.map((conversation) => <button key={conversation.id} onClick={() => setActiveConvId(conversation.id)} className={cn("w-full rounded-xl p-3 text-left transition hover:bg-secondary/60", conversation.id === activeConvId && "bg-[color:color-mix(in_oklab,var(--memory-teal)_7%,transparent)]")}><p className="truncate text-xs font-bold">{conversation.title || "Untitled Chat"}</p><div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground"><span>{conversation.updatedAt}</span>{conversation.memoryUsed && <BrainCircuit className="h-3 w-3 text-[color:var(--memory-teal)]" />}</div></button>)}</div></Panel>
+    <Panel className="flex min-h-[680px] flex-col overflow-hidden"><div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div><p className="text-sm font-bold">{activeConversation?.title || "Untitled Chat"}</p><div className="mt-1 flex items-center gap-2"><Pill tone="teal"><BrainCircuit className="h-3 w-3" /> Context active</Pill><span className="text-[10px] text-muted-foreground">User-scoped memory context</span></div></div><div className="relative"><button onClick={() => setModelOpen((value) => !value)} className="inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs font-bold transition hover:bg-secondary"><span className="h-2 w-2 rounded-full bg-[color:var(--memory-teal)]" />{selectedModel?.display_name || "Select Model"}<ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /></button>{modelOpen && <div className="absolute right-0 z-20 mt-2 w-[280px] rounded-2xl border border-border bg-popover p-2 text-popover-foreground shadow-xl"><p className="index-label px-3 py-2">Available for you</p>{availableModels.map((model) => <button key={model.id} onClick={() => handleSelectModel(model)} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition hover:bg-secondary", selectedModel?.id === model.id && "bg-[color:color-mix(in_oklab,var(--memory-teal)_8%,transparent)]")}><span><span className="block text-xs font-bold">{model.display_name}</span><span className="mt-1 block text-[10px] text-muted-foreground">{model.provider} · {model.model_key}</span></span>{selectedModel?.id === model.id && <Check className="h-4 w-4 text-[color:var(--memory-teal)]" />}</button>)}</div>}</div></div>
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-4 sm:p-6">
+        {messagesList.length === 0 && !isGenerating && (
+          <EmptyState icon={BrainCircuit} title="Start the conversation" copy="Say hello! The assistant will pull context from your long-term memory vault as you chat." />
+        )}
+        {messagesList.map((msg) => (
+          <div key={msg.id} className="mx-auto w-full max-w-[760px]">
+            <div className="mb-2 flex items-center gap-2">
+              {msg.role === "assistant" ? (
+                <>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-[10px] font-bold text-white">MH</span>
+                  <p className="index-label">AI Memory Hub · {msg.model_id || "Assistant"}</p>
+                </>
+              ) : (
+                <p className="index-label">You</p>
+              )}
+            </div>
+            <div className={cn("rounded-2xl rounded-tl-sm p-4 text-sm leading-6 whitespace-pre-wrap", msg.role === "user" ? "bg-secondary" : "border border-border bg-card shadow-sm")}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+        {isGenerating && draftResponse && (
+          <div className="mx-auto w-full max-w-[760px]">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-[10px] font-bold text-white">MH</span>
+              <p className="index-label">AI Memory Hub · {selectedModel?.display_name}</p>
+            </div>
+            <div className="rounded-2xl rounded-tl-sm border border-border bg-card p-4 text-sm leading-6 whitespace-pre-wrap">
+              {draftResponse}
+              <span className="mt-3 inline-flex items-center gap-2 text-xs text-muted-foreground block">Drafting response <span className="inline-flex gap-1"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--memory-teal)]" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--memory-teal)] [animation-delay:150ms]" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--memory-teal)] [animation-delay:300ms]" /></span></span>
+            </div>
+          </div>
+        )}
+        {errorMsg && (
+          <div className="mx-auto w-full max-w-[760px] rounded-xl border border-red-500/20 bg-red-50/50 p-4 text-xs text-red-600 dark:bg-red-950/20 dark:text-red-400">
+            <span className="font-bold block mb-1">Generation failed:</span>
+            {errorMsg}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-border p-3 sm:p-4"><div className="mx-auto max-w-[760px] rounded-2xl border border-border bg-background p-2 focus-within:border-[color:var(--memory-teal)] focus-within:ring-4 focus-within:ring-[color:color-mix(in_oklab,var(--memory-teal)_10%,transparent)]"><textarea value={messageText} onChange={(event) => setMessageText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} rows={2} placeholder="Ask with your current memory context…" className="w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground" /><div className="flex items-center justify-between px-1"><Pill tone="teal"><BrainCircuit className="h-3 w-3" /> Memory on</Pill><button onClick={send} className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--memory-teal)] text-white transition hover:bg-[color:var(--memory-teal-deep)] active:scale-[0.97]" aria-label="Send message"><SendHorizontal className="h-3.5 w-3.5" /></button></div></div></div></Panel>
+    <div className="hidden space-y-4 xl:block"><Panel className="p-4"><IndexLabel>Retrieved memory</IndexLabel><p className="mt-3 text-xs font-bold">Writing preference</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Concise, structured explanations with a clear next action.</p><Link href="/memory" className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">View memories <ArrowRight className="h-3 w-3" /></Link></Panel><Panel className="p-4"><IndexLabel>Session integrity</IndexLabel><div className="mt-3 flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[color:var(--memory-teal)]" /><p className="text-xs font-bold">Model switch is explicit</p></div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Changing a model does not silently alter your selected conversation context.</p></Panel></div>
   </div></AppShell>;
 }
 
@@ -69,9 +233,105 @@ function TimelinePage() { return <AppShell title="Memory Timeline" eyebrow="Memo
 
 function MemoryDetailsPage() { const [, navigate] = useLocation(); const memory = memories[0]; return <AppShell title="Memory Details" eyebrow="Memory"><div className="mx-auto max-w-[1040px]"><button onClick={() => navigate("/memory")} className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"><ArrowRight className="h-3.5 w-3.5 rotate-180" /> All memories</button><div className="grid gap-6 lg:grid-cols-[1fr_280px]"><Panel className="p-5 sm:p-7"><div className="flex flex-wrap items-center gap-2"><Pill tone="teal">{memory.category}</Pill>{memory.pinned && <Pill tone="teal"><Pin className="h-3 w-3" /> Pinned</Pill>}</div><div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-display text-[32px] font-semibold tracking-[-0.055em]">{memory.title}</h2><p className="mt-4 max-w-2xl text-[15px] leading-7 text-muted-foreground">{memory.content}</p></div><div className="flex gap-1"><IconButton label="Edit memory" onClick={() => backendToast("Editing a memory")}><Pencil className="h-4 w-4" /></IconButton><IconButton label="More memory actions" onClick={() => backendToast("Opening memory actions")}><MoreHorizontal className="h-4 w-4" /></IconButton></div></div><div className="mt-8 border-t border-border pt-6"><IndexLabel>Memory source</IndexLabel><Link href="/conversations" className="mt-3 flex items-center justify-between rounded-xl border border-border bg-[color:var(--surface-warm)] p-4 transition hover:bg-secondary"><span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-card"><MessageSquareText className="h-4 w-4 text-[color:var(--memory-teal)]" /></span><span><span className="block text-xs font-bold">{memory.source}</span><span className="mt-1 block text-[10px] text-muted-foreground">Conversation record · Aug 16, 2026</span></span></span><ExternalLink className="h-4 w-4 text-muted-foreground" /></Link></div></Panel><div className="space-y-4"><Panel className="p-5"><IndexLabel>Record state</IndexLabel><div className="mt-4 space-y-4 text-xs"><div className="flex items-center justify-between"><span className="text-muted-foreground">Created</span><span className="font-bold">{memory.createdAt}</span></div><div className="flex items-center justify-between"><span className="text-muted-foreground">Last updated</span><span className="font-bold">{memory.updatedAt}</span></div><div className="flex items-center justify-between"><span className="text-muted-foreground">Status</span><Pill tone="teal">Active</Pill></div></div></Panel><Panel className="p-3"><Button variant="secondary" className="w-full justify-start" onClick={() => backendToast("Archiving a memory")}><Archive className="h-4 w-4" /> Archive memory</Button><Button variant="secondary" className="mt-2 w-full justify-start" onClick={() => backendToast("Pinning a memory")}><Pin className="h-4 w-4" /> Pin as important</Button><Button variant="secondary" className="mt-2 w-full justify-start text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400" onClick={() => backendToast("Deleting a memory")}><Trash2 className="h-4 w-4" /> Delete memory</Button></Panel></div></div></div></AppShell>; }
 
-function ModelSelectorPage() { const [selected, setSelected] = useState(activeModel); const grouped = availableModels.reduce<Record<string, AvailableModel[]>>((acc, model) => { (acc[model.providerName] ??= []).push(model); return acc; }, {}); return <AppShell title="AI Model Selector" eyebrow="Models"><div className="mx-auto max-w-[1060px]"><PageIntro label="Your deliberate choice" title="Use the model you intend to use" copy="Only providers and models configured for your account are available here. Selecting one never silently switches a provider or changes your memory ownership." /><div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]"><Panel className="bg-[color:var(--ink-soft)] p-6 text-white"><Pill tone="dark"><span className="h-1.5 w-1.5 rounded-full bg-[color:var(--memory-teal-light)]" /> Current selection</Pill><p className="font-display mt-6 text-[29px] font-semibold tracking-[-0.055em]">{selected.name}</p><p className="mt-2 text-sm text-white/60">{selected.providerName} · {selected.context}</p><div className="mt-8 border-t border-white/10 pt-5"><p className="text-xs font-bold">Your context stays intact</p><p className="mt-2 text-xs leading-5 text-white/60">Model changes are explicit. Conversation history and long-term memory remain attached to your workspace, not the model.</p></div></Panel><div className="space-y-4">{Object.entries(grouped).map(([provider, models]) => <Panel key={provider} className="overflow-hidden"><div className="flex items-center justify-between border-b border-border px-5 py-4"><span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:color-mix(in_oklab,var(--memory-teal)_10%,transparent)]"><Bot className="h-4 w-4 text-[color:var(--memory-teal)]" /></span><span><span className="block text-sm font-bold">{provider}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Configured and available</span></span></span><Pill tone="teal">{models.length} models</Pill></div><div className="p-2">{models.map((model) => <button key={model.id} onClick={() => { setSelected(model); api.models.select(model.id).catch(() => backendToast("Selecting a model")); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition hover:bg-secondary", selected.id === model.id && "bg-[color:color-mix(in_oklab,var(--memory-teal)_8%,transparent)]")}><span><span className="flex items-center gap-2 text-xs font-bold">{model.name}{model.local && <Pill tone="neutral">Local</Pill>}</span><span className="mt-1 block text-[10px] text-muted-foreground">{model.context}</span></span>{selected.id === model.id ? <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--memory-teal)]"><Check className="h-3 w-3 text-white" /></span> : <span className="h-5 w-5 rounded-full border border-border" />}</button>)}</div></Panel>)}</div></div><Panel className="mt-6 border-dashed bg-[color:var(--surface-warm)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">Need another provider?</p><p className="mt-1 text-xs leading-5 text-muted-foreground">OpenAI, Anthropic, DeepSeek, Groq, and OpenRouter are not selectable until you securely configure them.</p></div><Link href="/settings/providers"><Button variant="secondary">Provider settings <ArrowRight className="h-4 w-4" /></Button></Link></div></Panel></div></AppShell>; }
+function ModelSelectorPage() {
+  const [availableModels, setAvailableModels] = useState<ModelRead[]>([]);
+  const [selectedModel, setSelectedModel] = useState<ModelRead | null>(null);
 
-function ProvidersPage() { const providers = [{ name: "Google", state: "Connected", model: "2 Gemini models available", status: "connected" }, { name: "Ollama", state: "Connected locally", model: "2 installed models available", status: "connected" }, { name: "OpenAI", state: "Not configured", model: "No models available to select", status: "empty" }, { name: "Anthropic", state: "Not configured", model: "No models available to select", status: "empty" }, { name: "OpenRouter", state: "Not configured", model: "No models available to select", status: "empty" }]; return <AppShell title="AI Provider Settings" eyebrow="Control center"><div className="mx-auto max-w-[1050px]"><PageIntro label="Provider connections" title="Connect only what you want to use" copy="Credentials belong on the backend. This browser interface never displays or stores a provider secret in plaintext." action={<Link href="/settings/api-keys"><Button variant="secondary"><KeyRound className="h-4 w-4" /> Credential vault</Button></Link>} /><div className="space-y-3">{providers.map((provider) => <Panel key={provider.name} className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"><div className="flex items-center gap-4"><span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", provider.status === "connected" ? "bg-[color:color-mix(in_oklab,var(--memory-teal)_12%,transparent)]" : "bg-secondary")}><Globe2 className={cn("h-5 w-5", provider.status === "connected" ? "text-[color:var(--memory-teal)]" : "text-muted-foreground")} /></span><span><span className="flex items-center gap-2"><span className="text-sm font-bold">{provider.name}</span><Pill tone={provider.status === "connected" ? "teal" : "neutral"}>{provider.state}</Pill></span><span className="mt-1 block text-[11px] text-muted-foreground">{provider.model}</span></span></div>{provider.status === "connected" ? <div className="flex gap-2"><Button variant="secondary" onClick={() => backendToast(`Managing ${provider.name}`)}>Manage</Button><Button variant="secondary" onClick={() => backendToast(`Disconnecting ${provider.name}`)}>Disconnect</Button></div> : <Button onClick={() => backendToast(`Connecting ${provider.name}`)}>Connect provider <ArrowRight className="h-4 w-4" /></Button>}</Panel>)}</div><Panel className="mt-6 p-5"><div className="flex gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--memory-teal)]" /><div><p className="text-sm font-bold">Provider availability governs model selection</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Only a configured, healthy provider returns models to the selection screen. AI Memory Hub does not automatically fall back to another provider when a model is unavailable.</p></div></div></Panel></div></AppShell>; }
+  useEffect(() => {
+    api.models.listRegistry()
+      .then((mods) => {
+        setAvailableModels(mods);
+        if (mods.length > 0) {
+          setSelectedModel(mods[0]);
+        }
+      })
+      .catch(() => {
+        toast.error("Failed to load available models");
+      });
+  }, []);
+
+  const handleSelectModel = (model: ModelRead) => {
+    setSelectedModel(model);
+    toast.success(`Selected model: ${model.display_name}`);
+  };
+
+  const grouped = availableModels.reduce<Record<string, ModelRead[]>>((acc, model) => {
+    (acc[model.provider] ??= []).push(model);
+    return acc;
+  }, {});
+
+  return <AppShell title="AI Model Selector" eyebrow="Models"><div className="mx-auto max-w-[1060px]"><PageIntro label="Your deliberate choice" title="Use the model you intend to use" copy="Only providers and models configured and enabled for your account are available here. Selecting one here does not silently switch a provider." /><div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]"><Panel className="bg-[color:var(--ink-soft)] p-6 text-white"><Pill tone="dark"><span className="h-1.5 w-1.5 rounded-full bg-[color:var(--memory-teal-light)]" /> Current selection</Pill><p className="font-display mt-6 text-[29px] font-semibold tracking-[-0.055em]">{selectedModel?.display_name || "None selected"}</p><p className="mt-2 text-sm text-white/60">{selectedModel?.provider} · {selectedModel?.model_key || "No model active"}</p><div className="mt-8 border-t border-white/10 pt-5"><p className="text-xs font-bold">Your context stays intact</p><p className="mt-2 text-xs leading-5 text-white/60">Model changes are explicit. Conversation history and long-term memory remain attached to your workspace, not the model.</p></div></Panel><div className="space-y-4">{Object.entries(grouped).map(([provider, models]) => <Panel key={provider} className="overflow-hidden"><div className="flex items-center justify-between border-b border-border px-5 py-4"><span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:color-mix(in_oklab,var(--memory-teal)_10%,transparent)]"><Bot className="h-4 w-4 text-[color:var(--memory-teal)]" /></span><span><span className="block text-sm font-bold uppercase">{provider}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Configured and available</span></span></span><Pill tone="teal">{models.length} models</Pill></div><div className="p-2">{models.map((model) => <button key={model.id} onClick={() => handleSelectModel(model)} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition hover:bg-secondary", selectedModel?.id === model.id && "bg-[color:color-mix(in_oklab,var(--memory-teal)_8%,transparent)]")}><span><span className="flex items-center gap-2 text-xs font-bold">{model.display_name}{model.is_local && <Pill tone="neutral">Local</Pill>}</span><span className="mt-1 block text-[10px] text-muted-foreground">{model.model_key}</span></span>{selectedModel?.id === model.id ? <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--memory-teal)]"><Check className="h-3 w-3 text-white" /></span> : <span className="h-5 w-5 rounded-full border border-border" />}</button>)}</div></Panel>)}</div></div><Panel className="mt-6 border-dashed bg-[color:var(--surface-warm)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">Need another provider?</p><p className="mt-1 text-xs leading-5 text-muted-foreground">OpenAI, Anthropic, DeepSeek, Groq, and OpenRouter are not selectable until you securely configure and enable them in settings.</p></div><Link href="/settings/providers"><Button variant="secondary">Provider settings <ArrowRight className="h-4 w-4" /></Button></Link></div></Panel></div></AppShell>; }
+
+const ALL_PROVIDERS = [
+  { id: "google", name: "Google Gemini", detail: "Connect to Google Gemini API" },
+  { id: "openai", name: "OpenAI", detail: "Connect to official OpenAI API" },
+  { id: "anthropic", name: "Anthropic Claude", detail: "Connect to Anthropic Claude API" },
+  { id: "deepseek", name: "DeepSeek", detail: "Connect to DeepSeek API" },
+  { id: "groq", name: "Groq", detail: "Connect to Groq Cloud API" },
+  { id: "openrouter", name: "OpenRouter", detail: "Connect to OpenRouter API" },
+  { id: "ollama", name: "Ollama (local)", detail: "Local Ollama host connection", local: true },
+];
+
+function ProvidersPage() {
+  const [configuredList, setConfiguredList] = useState<ProviderRead[]>([]);
+
+  const loadProviders = () => {
+    api.providers.listConfigured()
+      .then(setConfiguredList)
+      .catch(() => toast.error("Failed to load configured providers"));
+  };
+
+  useEffect(() => {
+    loadProviders();
+  }, []);
+
+  const handleConnect = async (providerId: string) => {
+    let key: string | null = null;
+    if (providerId !== "ollama") {
+      key = window.prompt(`Enter your API key for ${providerId}:`);
+      if (key === null) return;
+      if (!key.trim()) {
+        toast.error("API key cannot be empty");
+        return;
+      }
+    }
+    try {
+      await api.providers.configure(providerId, key, true);
+      toast.success(`${providerId} configured successfully`);
+      loadProviders();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to configure provider");
+    }
+  };
+
+  const handleDisconnect = async (providerId: string) => {
+    if (!window.confirm(`Disconnect ${providerId}? This will remove its API key.`)) return;
+    try {
+      await api.providers.remove(providerId);
+      toast.success(`${providerId} disconnected`);
+      loadProviders();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to disconnect provider");
+    }
+  };
+
+  const handleToggle = async (providerId: string, currentEnabled: boolean) => {
+    try {
+      await api.providers.update(providerId, { is_enabled: !currentEnabled });
+      toast.success(`${providerId} ${!currentEnabled ? "enabled" : "disabled"}`);
+      loadProviders();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update provider status");
+    }
+  };
+
+  return <AppShell title="AI Provider Settings" eyebrow="Control center"><div className="mx-auto max-w-[1050px]"><PageIntro label="Provider connections" title="Connect only what you want to use" copy="Credentials belong on the backend. This browser interface never displays or stores a provider secret in plaintext." action={<Link href="/settings/api-keys"><Button variant="secondary"><KeyRound className="h-4 w-4" /> Credential vault</Button></Link>} /><div className="space-y-3">{ALL_PROVIDERS.map((provider) => {
+    const config = configuredList.find(c => c.provider === provider.id);
+    const isConnected = !!config;
+    const isEnabled = config?.is_enabled ?? false;
+
+    return <Panel key={provider.id} className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"><div className="flex items-center gap-4"><span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", isConnected && isEnabled ? "bg-[color:color-mix(in_oklab,var(--memory-teal)_12%,transparent)]" : "bg-secondary")}><Globe2 className={cn("h-5 w-5", isConnected && isEnabled ? "text-[color:var(--memory-teal)]" : "text-muted-foreground")} /></span><span><span className="flex items-center gap-2"><span className="text-sm font-bold">{provider.name}</span><Pill tone={isConnected && isEnabled ? "teal" : isConnected ? "neutral" : "neutral"}>{isConnected ? (isEnabled ? "Connected & Enabled" : "Connected (Disabled)") : "Not Configured"}</Pill></span><span className="mt-1 block text-[11px] text-muted-foreground">{provider.detail}</span></span></div>{isConnected ? <div className="flex gap-2"><Button variant="secondary" onClick={() => handleToggle(provider.id, isEnabled)}>{isEnabled ? "Disable" : "Enable"}</Button><Button variant="secondary" onClick={() => handleDisconnect(provider.id)}>Disconnect</Button></div> : <Button onClick={() => handleConnect(provider.id)}>Connect provider <ArrowRight className="h-4 w-4" /></Button>}</Panel>;
+  })}</div><Panel className="mt-6 p-5"><div className="flex gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--memory-teal)]" /><div><p className="text-sm font-bold">Provider availability governs model selection</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Only a configured, healthy provider returns models to the selection screen. AI Memory Hub does not automatically fall back to another provider when a model is unavailable.</p></div></div></Panel></div></AppShell>; }
 
 function ApiKeysPage() { return <AppShell title="API Key Management" eyebrow="Control center"><div className="mx-auto max-w-[970px]"><PageIntro label="Credential vault" title="Keep provider credentials off the client" copy="Provider credentials are designed to be encrypted and handled by the FastAPI backend. This screen shows connection state and last use—not a raw secret." action={<Button onClick={() => backendToast("Adding a credential")}><Plus className="h-4 w-4" /> Add credential</Button>} /><Panel className="overflow-hidden"><div className="grid grid-cols-[1.2fr_1fr_0.8fr_auto] gap-4 border-b border-border bg-[color:var(--surface-warm)] px-5 py-3 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><span>Provider</span><span>Key state</span><span>Last used</span><span /></div>{[['Google', 'Encrypted and available', 'Today, 10:41'], ['Ollama', 'Local connection — no cloud key', 'Today, 10:40'], ['OpenAI', 'Not configured', '—']].map(([provider, state, used]) => <div key={provider} className="grid grid-cols-[1.2fr_1fr_0.8fr_auto] items-center gap-4 border-b border-border px-5 py-4 last:border-0"><span className="flex items-center gap-2 text-xs font-bold"><KeyRound className="h-4 w-4 text-[color:var(--memory-teal)]" /> {provider}</span><span><Pill tone={state.includes('available') || state.includes('Local') ? 'teal' : 'neutral'}>{state}</Pill></span><span className="text-[11px] text-muted-foreground">{used}</span><IconButton label={`Manage ${provider} credential`} onClick={() => backendToast(`Managing ${provider} credential`)}><MoreHorizontal className="h-4 w-4" /></IconButton></div>)}</Panel><div className="mt-5 grid gap-4 sm:grid-cols-2"><Panel className="p-5"><LockKeyhole className="h-5 w-5 text-[color:var(--memory-teal)]" /><p className="mt-4 text-sm font-bold">No plaintext in the browser</p><p className="mt-2 text-xs leading-5 text-muted-foreground">The frontend only receives credential status. Secrets never appear in components, local storage, logs, or network-facing markup.</p></Panel><Panel className="p-5"><ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400" /><p className="mt-4 text-sm font-bold">Rotation stays explicit</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Credential rotation and removal need an authenticated backend action, with clear provider-specific confirmation.</p></Panel></div></div></AppShell>; }
 

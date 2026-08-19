@@ -1,30 +1,10 @@
-import os
-os.environ['JWT_SECRET'] = 'test-secret-that-is-long-enough-for-testing'
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from app.database import Base, get_db
-from app.main import app
+from test_auth_and_isolation import client, headers, signup
 
-engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
-TestingSession = sessionmaker(bind=engine)
-Base.metadata.create_all(engine)
-def override_db():
-    db = TestingSession()
-    try: yield db
-    finally: db.close()
-app.dependency_overrides[get_db] = override_db
-client = TestClient(app)
-
-def token(email: str) -> str:
-    response = client.post('/api/v1/auth/register', json={'email': email, 'password': 'safe-password-123', 'full_name': 'Test'})
-    assert response.status_code == 201
-    return response.json()['access_token']
-def headers(value: str): return {'Authorization': f'Bearer {value}'}
+# Rename signup to token to keep the rest of the file unchanged
+token = signup
 
 def test_user_cannot_read_another_users_conversation_or_messages():
-    alice, bob = token('alice@example.com'), token('bob@example.com')
+    alice, bob = token('alice-iso@example.com'), token('bob-iso@example.com')
     created = client.post('/api/v1/conversations', headers=headers(alice), json={'title': 'private'}).json()
     conversation_id = created['id']
     assert client.get(f'/api/v1/conversations/{conversation_id}/messages', headers=headers(bob)).status_code == 404
