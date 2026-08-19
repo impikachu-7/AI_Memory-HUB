@@ -12,6 +12,7 @@ from app.schemas import *
 from app.services.auth import clear_login_failures, consume_otp, create_session, issue_otp, login_allowed, record_login_failure, revoke_all_sessions, revoke_session
 from app.services.credentials import encrypt_api_key
 from app.services.oauth import exchange_google_code, google_authorization_url
+from app.services.memory_engine import extract_from_conversation, retrieve, vector_store
 
 router = APIRouter()
 conversations, messages, memories, providers = (OwnedRepository(x) for x in (Conversation, Message, Memory, ProviderConfiguration))
@@ -126,20 +127,44 @@ def list_messages(conversation_id: str, db: Session = Depends(get_db), user: Use
 def create_message(conversation_id: str, body: MessageCreate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     conversations.get(db, user.id, conversation_id); return messages.create(db, Message(user_id=user.id, conversation_id=conversation_id, **body.model_dump()))
 
+@router.post('/conversations/{conversation_id}/extract-memories', response_model=list[MemoryRead])
+def extract_memories(conversation_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    conversations.get(db, user.id, conversation_id)
+    return extract_from_conversation(db, user.id, conversation_id)
+
 @router.get('/memories', response_model=list[MemoryRead])
 def list_memories(db: Session = Depends(get_db), user: User = Depends(current_user)): return memories.list(db, user.id)
 @router.post('/memories', response_model=MemoryRead, status_code=201)
 def create_memory(body: MemoryCreate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     if body.source_conversation_id: conversations.get(db, user.id, body.source_conversation_id)
-    return memories.create(db, Memory(user_id=user.id, **body.model_dump()))
+    memory = memories.create(db, Memory(user_id=user.id, **body.model_dump())); vector_store.upsert(memory); return memory
 @router.patch('/memories/{memory_id}', response_model=MemoryRead)
 def update_memory(memory_id: str, body: MemoryUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = memories.get(db, user.id, memory_id)
     for field, value in body.model_dump(exclude_unset=True).items(): setattr(item, field, value)
-    db.commit(); db.refresh(item); return item
+    db.commit(); db.refresh(item)
+    if item.is_archived: vector_store.delete(item.id)
+    else: vector_store.upsert(item)
+    return item
 @router.delete('/memories/{memory_id}', status_code=204)
 def delete_memory(memory_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    item = memories.get(db, user.id, memory_id); db.delete(item); db.commit()
+    item = memories.get(db, user.id, memory_id); vector_store.delete(item.id); db.delete(item); db.commit()
+
+@router.post('/memories/{memory_id}/archive', response_model=MemoryRead)
+def archive_memory(memory_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = memories.get(db, user.id, memory_id); item.is_archived = True; db.commit(); db.refresh(item); vector_store.delete(item.id); return item
+
+@router.post('/memories/{memory_id}/restore', response_model=MemoryRead)
+def restore_memory(memory_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = memories.get(db, user.id, memory_id); item.is_archived = False; db.commit(); db.refresh(item); vector_store.upsert(item); return item
+
+@router.post('/memories/{memory_id}/pin', response_model=MemoryRead)
+def pin_memory(memory_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = memories.get(db, user.id, memory_id); item.is_pinned = True; db.commit(); db.refresh(item); vector_store.upsert(item); return item
+
+@router.get('/memories/search', response_model=list[MemorySearchResult])
+def search_memories(query: str, limit: int = 8, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return [MemorySearchResult(**MemoryRead.model_validate(memory).model_dump(), score=score) for memory, score in retrieve(db, user.id, query, limit)]
 
 @router.get('/providers', response_model=list[ProviderRead])
 def list_providers(db: Session = Depends(get_db), user: User = Depends(current_user)): return providers.list(db, user.id)
