@@ -13,6 +13,7 @@ from app.main import app
 from app.models import AuthOtp, User
 from app.services.email import email_service
 from app.services.oauth import validate_google_id_token
+from app.core.config import get_settings
 
 engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine)
@@ -46,6 +47,16 @@ def test_invalid_and_expired_otp_are_rejected():
     assert client.post('/api/v1/auth/verify-email', json={'email': email, 'otp': '000000'}).status_code == 400
     db = TestingSession(); otp = db.scalar(select(AuthOtp).join(User).where(User.email == email)); otp.expires_at = datetime.now(UTC) - timedelta(seconds=1); db.commit(); db.close()
     assert client.post('/api/v1/auth/verify-email', json={'email': email, 'otp': email_service.outbox[-1].otp}).status_code == 400
+
+def test_otp_attempt_limit_and_resend_cooldown():
+    email = 'attempts@example.com'; client.post('/api/v1/auth/register', json={'email': email, 'password': 'safe-password-123'})
+    for _ in range(4): assert client.post('/api/v1/auth/verify-email', json={'email': email, 'otp': '000000'}).status_code == 400
+    assert client.post('/api/v1/auth/verify-email', json={'email': email, 'otp': '000000'}).status_code == 400
+    assert client.post('/api/v1/auth/verify-email', json={'email': email, 'otp': '000000'}).status_code == 400
+    cooldown_email = 'cooldown@example.com'; client.post('/api/v1/auth/register', json={'email': cooldown_email, 'password': 'safe-password-123'})
+    settings = get_settings(); previous = settings.otp_resend_cooldown_seconds; settings.otp_resend_cooldown_seconds = 60
+    try: assert client.post('/api/v1/auth/resend-verification', json={'email': cooldown_email}).status_code == 429
+    finally: settings.otp_resend_cooldown_seconds = previous
 
 def test_login_logout_and_protected_routes():
     token = signup('login@example.com')
