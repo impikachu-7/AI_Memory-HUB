@@ -29,8 +29,55 @@ function AuthShell({ children, label }: { children: React.ReactNode; label: stri
 }
 
 function AuthTitle({ title, subtitle }: { title: string; subtitle: string }) { return <><p className="index-label text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Secure access</p><h2 className="font-display mt-3 text-[34px] font-semibold tracking-[-0.055em]">{title}</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">{subtitle}</p></>; }
-function Field({ label, type = "text", placeholder, icon, right, value, onChange }: { label: string; type?: string; placeholder: string; icon?: React.ReactNode; right?: React.ReactNode; value?: string; onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void }) { return <label className="block"><span className="mb-2 block text-xs font-bold text-foreground">{label}</span><span className="relative block">{icon && <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{icon}</span>}<input type={type} placeholder={placeholder} value={value} onChange={onChange} className={`h-11 w-full rounded-xl border border-input bg-card text-sm outline-none transition placeholder:text-muted-foreground/75 focus:border-[color:var(--memory-teal)] focus:ring-4 focus:ring-[color:color-mix(in_oklab,var(--memory-teal)_13%,transparent)] ${icon ? 'pl-10' : 'px-3.5'} ${right ? 'pr-11' : 'pr-3.5'}`} />{right}</span></label>; }
-function SolidButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) { return <button onClick={onClick} type="button" className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--memory-teal)] px-4 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[color:var(--memory-teal-deep)] active:scale-[0.97]">{children}</button>; }
+function Field({
+  label,
+  type = "text",
+  placeholder,
+  icon,
+  right,
+  value,
+  onChange,
+  minLength,
+}: {
+  label: string;
+  type?: string;
+  placeholder: string;
+  icon?: React.ReactNode;
+  right?: React.ReactNode;
+  value?: string;
+  onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  minLength?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-bold text-foreground">
+        {label}
+      </span>
+
+      <span className="relative block">
+        {icon && (
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+            {icon}
+          </span>
+        )}
+
+        <input
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          minLength={minLength}
+          className={`h-11 w-full rounded-xl border border-input bg-card text-sm outline-none transition placeholder:text-muted-foreground/75 focus:border-[color:var(--memory-teal)] focus:ring-4 focus:ring-[color:color-mix(in_oklab,var(--memory-teal)_13%,transparent)] ${
+            icon ? "pl-10" : "px-3.5"
+          } ${right ? "pr-11" : "pr-3.5"}`}
+        />
+
+        {right}
+      </span>
+    </label>
+  );
+}
+ function SolidButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) { return <button onClick={onClick} type="button" className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--memory-teal)] px-4 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[color:var(--memory-teal-deep)] active:scale-[0.97]">{children}</button>; }
 function GoogleButton({ onClick }: { onClick: () => void }) { return <button onClick={onClick} type="button" className="inline-flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-border bg-card text-sm font-bold transition hover:bg-secondary active:scale-[0.97]"><span className="font-display text-lg font-bold text-[#4285F4]">G</span> Continue with Google</button>; }
 
 export default function AuthPage({ mode }: { mode: AuthMode }) {
@@ -54,5 +101,11 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   if (mode === "forgot") return <AuthShell label="Account recovery"><div><Link href="/login" className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Back to sign in</Link><div className="mt-9"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[color:color-mix(in_oklab,var(--memory-teal)_13%,transparent)]"><LockKeyhole className="h-5 w-5 text-[color:var(--memory-teal)]" /></span><div className="mt-6"><AuthTitle title="Reset your password" subtitle="We’ll send a password reset link to the verified email on your account." /></div><div className="mt-8 space-y-5"><Field label="Email address" type="email" placeholder="you@example.com" icon={<Mail className="h-4 w-4" />} value={email} onChange={(event) => setEmail(event.target.value)} /><SolidButton onClick={() => { api.auth.requestPasswordReset(email).then(() => setNotice(true)).catch(showError); }}>Send reset link <ArrowRight className="h-4 w-4" /></SolidButton>{notice && <p className="rounded-xl border border-[color:color-mix(in_oklab,var(--memory-teal)_28%,transparent)] bg-[color:color-mix(in_oklab,var(--memory-teal)_7%,transparent)] p-3 text-xs leading-5 text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">A password reset code will be sent if the account exists.</p>}</div></div></div></AuthShell>;
 
   const isRegister = mode === "register";
-  return <AuthShell label={isRegister ? "Create your workspace" : "Welcome back"}><div className="lg:hidden"><Link href="/"><BrandLockup /></Link></div><div className="mt-9 lg:mt-0"><AuthTitle title={isRegister ? "Create your private hub" : "Sign in to your workspace"} subtitle={isRegister ? "Start with a verified account, then connect only the AI providers you choose." : "Continue with your user-controlled AI memory workspace."} /><div className="mt-8 space-y-5">{isRegister && <Field label="Full name" placeholder="Alex Morgan" value={fullName} onChange={(event) => setFullName(event.target.value)} />}{isRegister && <Field label="Email address" type="email" placeholder="you@example.com" icon={<Mail className="h-4 w-4" />} value={email} onChange={(event) => setEmail(event.target.value)} />}{!isRegister && <Field label="Email address" type="email" placeholder="you@example.com" icon={<Mail className="h-4 w-4" />} value={email} onChange={(event) => setEmail(event.target.value)} />}<Field label="Password" type={passwordVisible ? "text" : "password"} placeholder="••••••••••••" icon={<LockKeyhole className="h-4 w-4" />} value={password} onChange={(event) => setPassword(event.target.value)} right={<button type="button" onClick={() => setPasswordVisible((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label={passwordVisible ? 'Hide password' : 'Show password'}>{passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>} />{!isRegister && <div className="flex justify-end"><Link href="/forgot-password" className="text-xs font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Forgot password?</Link></div>}<SolidButton onClick={() => { if (isRegister) { api.auth.register(email, password, fullName).then(() => { sessionStorage.setItem("ai-memory-hub.pending-email", email); navigate("/verify-email"); }).catch(showError); } else { signIn(email, password).then(() => navigate("/chat")).catch(showError); } }}>{isRegister ? 'Create account' : 'Sign in'} <ArrowRight className="h-4 w-4" /></SolidButton></div><div className="my-6 flex items-center gap-3 text-[11px] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">or</div><GoogleButton onClick={() => navigate("/auth/google")} /><p className="mt-7 text-center text-xs text-muted-foreground">{isRegister ? <>Already have an account? <Link href="/login" className="font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Sign in</Link></> : <>New to AI Memory Hub? <Link href="/register" className="font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Create account</Link></>}</p></div></AuthShell>;
+  return <AuthShell label={isRegister ? "Create your workspace" : "Welcome back"}><div className="lg:hidden"><Link href="/"><BrandLockup /></Link></div><div className="mt-9 lg:mt-0"><AuthTitle title={isRegister ? "Create your private hub" : "Sign in to your workspace"} subtitle={isRegister ? "Start with a verified account, then connect only the AI providers you choose." : "Continue with your user-controlled AI memory workspace."} /><div className="mt-8 space-y-5">{isRegister && <Field label="Full name" placeholder="Alex Morgan" value={fullName} onChange={(event) => setFullName(event.target.value)} />}{isRegister && <Field label="Email address" type="email" placeholder="you@example.com" icon={<Mail className="h-4 w-4" />} value={email} onChange={(event) => setEmail(event.target.value)} />}{!isRegister && <Field label="Email address" type="email" placeholder="you@example.com" icon={<Mail className="h-4 w-4" />} value={email} onChange={(event) => setEmail(event.target.value)} />}<Field label="Password" type={passwordVisible ? "text" : "password"} placeholder="At least 12 characters" icon={<LockKeyhole className="h-4 w-4" />} value={password} onChange={(event) => setPassword(event.target.value)} minLength={isRegister ? 12 : undefined} right={<button type="button" onClick={() => setPasswordVisible((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label={passwordVisible ? 'Hide password' : 'Show password'}>{passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>} />{!isRegister && <div className="flex justify-end"><Link href="/forgot-password" className="text-xs font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Forgot password?</Link></div>}<SolidButton onClick={() => { if (isRegister) {
+  if (password.length < 12) {
+    showError("Password must be at least 12 characters.");
+    return;
+  }
+
+  api.auth.register(email, password, fullName).then(() => { sessionStorage.setItem("ai-memory-hub.pending-email", email); navigate("/verify-email"); }).catch(showError); } else { signIn(email, password).then(() => navigate("/chat")).catch(showError); } }}>{isRegister ? 'Create account' : 'Sign in'} <ArrowRight className="h-4 w-4" /></SolidButton></div><div className="my-6 flex items-center gap-3 text-[11px] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">or</div><GoogleButton onClick={() => navigate("/auth/google")} /><p className="mt-7 text-center text-xs text-muted-foreground">{isRegister ? <>Already have an account? <Link href="/login" className="font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Sign in</Link></> : <>New to AI Memory Hub? <Link href="/register" className="font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Create account</Link></>}</p></div></AuthShell>;
 }

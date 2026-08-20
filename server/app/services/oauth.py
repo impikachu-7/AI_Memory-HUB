@@ -17,20 +17,43 @@ def exchange_google_code(code: str) -> dict:
     settings = get_settings()
     if not all([settings.google_oauth_client_id, settings.google_oauth_client_secret, settings.google_oauth_redirect_uri]):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth is not configured")
-    response = httpx.post(GOOGLE_TOKEN_URL, data={"code": code, "client_id": settings.google_oauth_client_id, "client_secret": settings.google_oauth_client_secret, "redirect_uri": settings.google_oauth_redirect_uri, "grant_type": "authorization_code"}, timeout=10)
+    try:
+        response = httpx.post(GOOGLE_TOKEN_URL, data={"code": code, "client_id": settings.google_oauth_client_id, "client_secret": settings.google_oauth_client_secret, "redirect_uri": settings.google_oauth_redirect_uri, "grant_type": "authorization_code"}, timeout=10)
+    except httpx.RequestError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Unable to contact Google authorization service") from exc
     if response.status_code != 200: raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google authorization failed")
     return validate_google_id_token(response.json().get("id_token", ""))
 
 def validate_google_id_token(token: str) -> dict:
     settings = get_settings()
-    if not settings.google_oauth_client_id: raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth is not configured")
+
+    if not settings.google_oauth_client_id:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Google OAuth is not configured"
+        )
+
     try:
         from google.auth.transport.requests import Request
         from google.oauth2 import id_token
-        claims = id_token.verify_oauth2_token(token, Request(), settings.google_oauth_client_id)
-    except Exception as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid Google identity token") from exc
-    if not claims.get("sub") or not claims.get("email") or not claims.get("email_verified"):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google account email is not verified")
-    return claims
 
+        claims = id_token.verify_oauth2_token(
+            token,
+            Request(),
+            settings.google_oauth_client_id,
+            clock_skew_in_seconds=10,
+        )
+
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Invalid Google identity token"
+        ) from exc
+
+    if not claims.get("sub") or not claims.get("email") or not claims.get("email_verified"):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Google account email is not verified"
+        )
+
+    return claims

@@ -113,3 +113,11 @@ client/public/__manus__/version.json
 .project-config.json
 
 .vs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local application data
+server/data/

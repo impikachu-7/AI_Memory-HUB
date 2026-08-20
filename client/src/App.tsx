@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import AuthPage from "@/pages/AuthPages";
+import GoogleCallbackPage from "@/pages/GoogleCallbackPage";
 import LandingPage from "@/pages/LandingPage";
 import NotFound from "@/pages/NotFound";
 import { WorkspaceRoute } from "@/pages/WorkspacePages";
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/login"><AuthPage mode="login" /></Route>
       <Route path="/register"><AuthPage mode="register" /></Route>
       <Route path="/auth/google"><AuthPage mode="google" /></Route>
+      <Route path="/auth/google/callback"><GoogleCallbackPage /></Route>
       <Route path="/verify-email"><AuthPage mode="verify" /></Route>
       <Route path="/forgot-password"><AuthPage mode="forgot" /></Route>
       <Route path="/chat"><WorkspaceRoute page="chat" /></Route>

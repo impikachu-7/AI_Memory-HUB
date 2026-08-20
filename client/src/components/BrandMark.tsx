@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-const MARK_URL = "/manus-storage/ai-memory-hub-logo_2603b235.png";
+const MARK_URL = "/ai-memory-hub-logo.svg";
 
 export function BrandMark({ className, priority = false }: { className?: string; priority?: boolean }) {
   return (

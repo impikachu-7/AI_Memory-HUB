@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     cookie_samesite: str = "lax"
     cookie_domain: str | None = None
-    frontend_origins: str = "http://localhost:5173"
+    frontend_origins: str = "http://localhost:3000"
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
     google_oauth_redirect_uri: str | None = None

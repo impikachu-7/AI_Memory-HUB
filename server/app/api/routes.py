@@ -1,7 +1,9 @@
+from fastapi.responses import RedirectResponse
 from datetime import UTC, datetime, timedelta
 import json
 import logging
 import secrets
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
@@ -102,23 +104,86 @@ def google_start():
     state = encode({'nonce': secrets.token_urlsafe(24), 'exp': datetime.now(UTC) + timedelta(minutes=10)}, get_settings().jwt_secret, algorithm=get_settings().jwt_algorithm)
     return {'authorization_url': google_authorization_url(state)}
 
-@router.post('/auth/google/callback', response_model=TokenResponse)
-def google_callback(body: GoogleCallbackRequest, db: Session = Depends(get_db)):
+@router.get('/auth/google/callback')
+def google_callback(
+    code: str,
+    state: str,
+    db: Session = Depends(get_db),
+):
     from app.core.config import get_settings
     import jwt
-    try: jwt.decode(body.state, get_settings().jwt_secret, algorithms=[get_settings().jwt_algorithm])
-    except jwt.InvalidTokenError as exc: raise HTTPException(400, 'Invalid OAuth state') from exc
-    claims = exchange_google_code(body.code)
-    identity = db.scalar(select(OAuthIdentity).where(OAuthIdentity.provider == 'google', OAuthIdentity.subject == claims['sub']))
-    if identity: user = db.get(User, identity.user_id)
+
+    try:
+        state_claims = jwt.decode(
+            state,
+            get_settings().jwt_secret,
+            algorithms=[get_settings().jwt_algorithm],
+        )
+        if not state_claims.get('nonce'):
+            raise jwt.InvalidTokenError()
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(400, 'Invalid OAuth state') from exc
+
+    claims = exchange_google_code(code)
+
+    identity = db.scalar(
+        select(OAuthIdentity).where(
+            OAuthIdentity.provider == 'google',
+            OAuthIdentity.subject == claims['sub'],
+        )
+    )
+
+    if identity:
+        user = db.get(User, identity.user_id)
     else:
-        user = db.scalar(select(User).where(User.email == claims['email'].lower()))
+        user = db.scalar(
+            select(User).where(
+                User.email == claims['email'].lower()
+            )
+        )
+
         if not user:
-            user = User(email=claims['email'].lower(), full_name=claims.get('name'), password_hash=hash_password(secrets.token_urlsafe(32)), is_active=True, is_email_verified=True)
-            db.add(user); db.flush()
-        user.is_active, user.is_email_verified = True, True
-        db.add(OAuthIdentity(user_id=user.id, provider='google', subject=claims['sub'])); db.commit(); db.refresh(user)
-    return TokenResponse(access_token=create_session(db, user), user=user)
+            user = User(
+                email=claims['email'].lower(),
+                full_name=claims.get('name'),
+                password_hash=hash_password(
+                    secrets.token_urlsafe(32)
+                ),
+                is_active=True,
+                is_email_verified=True,
+            )
+            db.add(user)
+            db.flush()
+
+        user.is_active = True
+        user.is_email_verified = True
+
+        db.add(
+            OAuthIdentity(
+                user_id=user.id,
+                provider='google',
+                subject=claims['sub'],
+            )
+        )
+
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_session(db, user)
+
+    settings = get_settings()
+
+    frontend_origin = next(
+        (origin.strip() for origin in settings.frontend_origins.split(',') if origin.strip()),
+        None,
+    )
+    if not frontend_origin:
+        raise HTTPException(503, 'Frontend origin is not configured')
+
+    return RedirectResponse(
+        url=f"{frontend_origin}/auth/google/callback?{urlencode({'access_token': access_token})}",
+        status_code=303,
+    )
 
 @router.get('/users/me', response_model=UserRead)
 def me(user: User = Depends(current_user)): return user

@@ -1,10 +1,9 @@
 /** Quiet Intelligence Console workbench: clear user controls, styled illustrative data, and no simulated backend persistence. */
-
+import { api } from "@/services/api";
 import { AppShell, NewConversationButton } from "@/components/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import type { AvailableModel, ConversationSummary, MemoryRecord, Message, ModelRead, ProviderRead } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { api } from "@/services/api";
 import {
   Archive, ArrowDownToLine, ArrowRight, BarChart3, Bell, Bot, BrainCircuit, CalendarClock, Check, ChevronDown, ChevronsUpDown, CircleAlert, Clock3, Copy, Download, Edit3, Ellipsis, ExternalLink, FileText, Filter, FolderOpen, Gauge, Globe2, KeyRound, LayoutDashboard, LockKeyhole, Mail, MessageSquareText, MoreHorizontal, Network, PanelRightClose, Pencil, Pin, Plus, RefreshCw, Search, SendHorizontal, Settings2, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Tags, Trash2, Undo2, UserRound, X,
 } from "lucide-react";
@@ -57,19 +56,37 @@ function ChatPage() {
   const activeConversation = conversationsList.find((c) => c.id === activeConvId);
 
   // Load initial data: conversations and registry models (filtered by enabled providers server-side)
-  useEffect(() => {
-    Promise.all([api.conversations.list(), api.models.listRegistry()])
-      .then(([convs, mods]) => {
+ useEffect(() => {
+  const loadChat = async () => {
+    try {
+      const [convs, mods] = await Promise.all([
+        api.conversations.list(),
+        api.models.listRegistry(),
+      ]);
+
+      setAvailableModels(mods);
+
+      if (convs.length > 0) {
+        // Existing conversation
         setConversationsList(convs);
-        setAvailableModels(mods);
-        if (convs.length > 0) {
-          setActiveConvId(convs[0].id);
-        }
-      })
-      .catch(() => {
-        toast.error("Failed to load workspace data");
-      });
-  }, []);
+        setActiveConvId(convs[0].id);
+      } else {
+        // No conversation exists → create one
+        const newConversation = await api.conversations.create(
+          "Untitled Chat"
+        );
+
+        setConversationsList([newConversation]);
+        setActiveConvId(newConversation.id);
+      }
+    } catch (error) {
+      console.error("FAILED TO LOAD CHAT:", error);
+      toast.error("Failed to load chat");
+    }
+  };
+
+  loadChat();
+}, []);
 
   // Fetch messages and select correct model when active conversation changes
   useEffect(() => {
@@ -107,21 +124,42 @@ function ChatPage() {
   };
 
   const handleSelectModel = async (model: ModelRead) => {
-    setModelOpen(false);
-    if (activeConvId) {
-      try {
-        await api.conversations.update(activeConvId, { selected_model_id: model.id });
-        setSelectedModel(model);
-        setErrorMsg("");
-        setDraftResponse("");
-        setConversationsList((prev) =>
-          prev.map((c) => (c.id === activeConvId ? { ...c, selected_model_id: model.id } : c))
-        );
-      } catch {
-        toast.error("Failed to update selected model");
-      }
-    }
-  };
+  console.log("MODEL CLICKED:", model);
+
+  setSelectedModel(model);
+  setModelOpen(false);
+
+  if (!activeConvId) {
+    console.error("NO ACTIVE CONVERSATION");
+    toast.error("No active conversation");
+    return;
+  }
+
+  try {
+    console.log("SAVING MODEL:", activeConvId, model.id);
+
+    await api.conversations.update(activeConvId, {
+      selected_model_id: model.id,
+    });
+
+    setConversationsList((prev) =>
+      prev.map((conversation) =>
+        conversation.id === activeConvId
+          ? {
+              ...conversation,
+              selected_model_id: model.id,
+            }
+          : conversation
+      )
+    );
+
+    console.log("MODEL SAVED:", model.display_name);
+    toast.success(`Selected model: ${model.display_name}`);
+  } catch (error) {
+    console.error("MODEL SAVE FAILED:", error);
+    toast.error("Failed to save model selection");
+  }
+};
 
   const send = () => {
     if (!messageText.trim() || !activeConvId || isGenerating) return;
@@ -233,8 +271,181 @@ function CategoriesPage() { const groups = [{ name: "Preferences", count: 34, no
 
 function TimelinePage() { return <AppShell title="Memory Timeline" eyebrow="Memory"><div className="mx-auto max-w-[980px]"><PageIntro label="The memory thread" title="See how your long-term context evolved" copy="The timeline shows when a memory was created or changed, while preserving a link back to its source conversation." /><div className="relative ml-3 border-l border-[color:color-mix(in_oklab,var(--memory-teal)_30%,transparent)] pl-8 sm:ml-5 sm:pl-10">{[['Today', memories.slice(0, 2)], ['Aug 12, 2026', [memories[2]]], ['Jul 27, 2026', [memories[3]]]].map(([date, items]) => <div key={date as string} className="relative pb-10"><span className="absolute -left-[39px] top-1 h-3.5 w-3.5 rounded-full border-[3px] border-background bg-[color:var(--memory-teal)] sm:-left-[47px]" /><p className="index-label mb-4">{date as string}</p><div className="space-y-3">{(items as MemoryRecord[]).map((memory) => <Panel key={memory.id} className="p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2"><p className="text-sm font-bold">{memory.title}</p>{memory.pinned && <Pin className="h-3.5 w-3.5 fill-[color:var(--memory-teal)] text-[color:var(--memory-teal)]" />}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{memory.content}</p></div><Pill tone={memory.status === "archived" ? "neutral" : "teal"}>{memory.status === "archived" ? 'Archived' : 'Created'}</Pill></div><div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground"><span className="flex items-center gap-1"><MessageSquareText className="h-3 w-3" /> Source: {memory.source}</span><span>·</span><span>Updated {memory.updatedAt}</span><Link href={`/memory/${memory.id}`} className="ml-auto font-bold text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]">Open details</Link></div></Panel>)}</div></div>)}</div></div></AppShell>; }
 
-function MemoryDetailsPage() { const [, navigate] = useLocation(); const memory = memories[0]; return <AppShell title="Memory Details" eyebrow="Memory"><div className="mx-auto max-w-[1040px]"><button onClick={() => navigate("/memory")} className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"><ArrowRight className="h-3.5 w-3.5 rotate-180" /> All memories</button><div className="grid gap-6 lg:grid-cols-[1fr_280px]"><Panel className="p-5 sm:p-7"><div className="flex flex-wrap items-center gap-2"><Pill tone="teal">{memory.category}</Pill>{memory.pinned && <Pill tone="teal"><Pin className="h-3 w-3" /> Pinned</Pill>}</div><div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-display text-[32px] font-semibold tracking-[-0.055em]">{memory.title}</h2><p className="mt-4 max-w-2xl text-[15px] leading-7 text-muted-foreground">{memory.content}</p></div><div className="flex gap-1"><IconButton label="Edit memory" onClick={() => backendToast("Editing a memory")}><Pencil className="h-4 w-4" /></IconButton><IconButton label="More memory actions" onClick={() => backendToast("Opening memory actions")}><MoreHorizontal className="h-4 w-4" /></IconButton></div></div><div className="mt-8 border-t border-border pt-6"><IndexLabel>Memory source</IndexLabel><Link href="/conversations" className="mt-3 flex items-center justify-between rounded-xl border border-border bg-[color:var(--surface-warm)] p-4 transition hover:bg-secondary"><span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-card"><MessageSquareText className="h-4 w-4 text-[color:var(--memory-teal)]" /></span><span><span className="block text-xs font-bold">{memory.source}</span><span className="mt-1 block text-[10px] text-muted-foreground">Conversation record · Aug 16, 2026</span></span></span><ExternalLink className="h-4 w-4 text-muted-foreground" /></Link></div></Panel><div className="space-y-4"><Panel className="p-5"><IndexLabel>Record state</IndexLabel><div className="mt-4 space-y-4 text-xs"><div className="flex items-center justify-between"><span className="text-muted-foreground">Created</span><span className="font-bold">{memory.createdAt}</span></div><div className="flex items-center justify-between"><span className="text-muted-foreground">Last updated</span><span className="font-bold">{memory.updatedAt}</span></div><div className="flex items-center justify-between"><span className="text-muted-foreground">Status</span><Pill tone="teal">Active</Pill></div></div></Panel><Panel className="p-3"><Button variant="secondary" className="w-full justify-start" onClick={() => backendToast("Archiving a memory")}><Archive className="h-4 w-4" /> Archive memory</Button><Button variant="secondary" className="mt-2 w-full justify-start" onClick={() => backendToast("Pinning a memory")}><Pin className="h-4 w-4" /> Pin as important</Button><Button variant="secondary" className="mt-2 w-full justify-start text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400" onClick={() => backendToast("Deleting a memory")}><Trash2 className="h-4 w-4" /> Delete memory</Button></Panel></div></div></div></AppShell>; }
+function MemoryDetailsPage() {
+  const [, navigate] = useLocation();
+  const memory = memories[0];
 
+  const handleArchive = async () => {
+    try {
+      await api.memories.archive(memory.id);
+      toast.success("Memory archived");
+      navigate("/memory");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to archive memory"
+      );
+    }
+  };
+
+  const handlePin = async () => {
+    try {
+      await api.memories.pin(memory.id);
+      toast.success("Memory pinned");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to pin memory"
+      );
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await api.memories.remove(memory.id);
+      toast.success("Memory deleted");
+      navigate("/memory");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete memory"
+      );
+    }
+  };
+
+  return (
+    <AppShell title="Memory Details" eyebrow="Memory">
+      <div className="mx-auto max-w-[1040px]">
+        <button
+          onClick={() => navigate("/memory")}
+          className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"
+        >
+          <ArrowRight className="h-3.5 w-3.5 rotate-180" />
+          All memories
+        </button>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+          <Panel className="p-5 sm:p-7">
+            <div className="flex flex-wrap items-center gap-2">
+              <Pill tone="teal">{memory.category}</Pill>
+
+              {memory.pinned && (
+                <Pill tone="teal">
+                  <Pin className="h-3 w-3" />
+                  Pinned
+                </Pill>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="font-display text-[32px] font-semibold tracking-[-0.055em]">
+                  {memory.title}
+                </h2>
+
+                <p className="mt-4 max-w-2xl text-[15px] leading-7 text-muted-foreground">
+                  {memory.content}
+                </p>
+              </div>
+
+              <div className="flex gap-1">
+                <IconButton
+                  label="Edit memory"
+                  onClick={() => backendToast("Editing a memory")}
+                >
+                  <Pencil className="h-4 w-4" />
+                </IconButton>
+
+                <IconButton
+                  label="More memory actions"
+                  onClick={() => backendToast("Opening memory actions")}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </IconButton>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-border pt-6">
+              <IndexLabel>Memory source</IndexLabel>
+
+              <Link
+                href="/conversations"
+                className="mt-3 flex items-center justify-between rounded-xl border border-border bg-[color:var(--surface-warm)] p-4 transition hover:bg-secondary"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-card">
+                    <MessageSquareText className="h-4 w-4 text-[color:var(--memory-teal)]" />
+                  </span>
+
+                  <span>
+                    <span className="block text-xs font-bold">
+                      {memory.source}
+                    </span>
+
+                    <span className="mt-1 block text-[10px] text-muted-foreground">
+                      Conversation record · Aug 16, 2026
+                    </span>
+                  </span>
+                </span>
+
+                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            </div>
+          </Panel>
+
+          <div className="space-y-4">
+            <Panel className="p-5">
+              <IndexLabel>Record state</IndexLabel>
+
+              <div className="mt-4 space-y-4 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Created</span>
+                  <span className="font-bold">{memory.createdAt}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Last updated</span>
+                  <span className="font-bold">{memory.updatedAt}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <Pill tone="teal">Active</Pill>
+                </div>
+              </div>
+            </Panel>
+
+            <Panel className="p-3">
+              <Button
+                variant="secondary"
+                className="w-full justify-start"
+                onClick={handleArchive}
+              >
+                <Archive className="h-4 w-4" />
+                Archive memory
+              </Button>
+
+              <Button
+                variant="secondary"
+                className="mt-2 w-full justify-start"
+                onClick={handlePin}
+              >
+                <Pin className="h-4 w-4" />
+                Pin as important
+              </Button>
+
+              <Button
+                variant="secondary"
+                className="mt-2 w-full justify-start text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400"
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete memory
+              </Button>
+            </Panel>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
 function ModelSelectorPage() {
   const [availableModels, setAvailableModels] = useState<ModelRead[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelRead | null>(null);
@@ -252,10 +463,43 @@ function ModelSelectorPage() {
       });
   }, []);
 
-  const handleSelectModel = (model: ModelRead) => {
-    setSelectedModel(model);
+const handleSelectModel = async (model: ModelRead) => {
+  console.log("MODEL CLICKED:", model);
+
+  setSelectedModel(model);
+  setModelOpen(false);
+
+  if (!activeConvId) {
+    console.error("NO ACTIVE CONVERSATION");
+    toast.error("No active conversation");
+    return;
+  }
+
+  try {
+    console.log("SAVING MODEL:", activeConvId, model.id);
+
+    await api.conversations.update(activeConvId, {
+      selected_model_id: model.id,
+    });
+
+    setConversationsList((prev) =>
+      prev.map((conversation) =>
+        conversation.id === activeConvId
+          ? {
+              ...conversation,
+              selected_model_id: model.id,
+            }
+          : conversation
+      )
+    );
+
+    console.log("MODEL SAVED:", model.display_name);
     toast.success(`Selected model: ${model.display_name}`);
-  };
+  } catch (error) {
+    console.error("MODEL SAVE FAILED:", error);
+    toast.error("Failed to save model selection");
+  }
+};
 
   const grouped = availableModels.reduce<Record<string, ModelRead[]>>((acc, model) => {
     (acc[model.provider] ??= []).push(model);
