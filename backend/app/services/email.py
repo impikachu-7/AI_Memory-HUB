@@ -23,7 +23,9 @@ class EmailService:
             message = EmailMessage()
             message["From"], message["To"], message["Subject"] = settings.email_from, recipient, "AI Memory Hub verification code"
             message.set_content(f"Your {purpose.replace('_', ' ')} code is: {otp}")
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
+            if not all([settings.smtp_host, settings.smtp_username, settings.smtp_password]):
+                raise smtplib.SMTPException("SMTP configuration is incomplete")
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
                 smtp.starttls(); smtp.login(settings.smtp_username, settings.smtp_password); smtp.send_message(message)
         # Console mode intentionally does not print the OTP.
 

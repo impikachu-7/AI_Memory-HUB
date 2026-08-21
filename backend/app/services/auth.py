@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+import smtplib
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -26,8 +27,12 @@ def issue_otp(db: Session, user: User, purpose: str) -> None:
     db.execute(update(AuthOtp).where(AuthOtp.user_id == user.id, AuthOtp.purpose == purpose, AuthOtp.used_at.is_(None)).values(used_at=now()))
     code = generate_otp()
     db.add(AuthOtp(user_id=user.id, purpose=purpose, code_hash=otp_hash(code), expires_at=now() + timedelta(minutes=settings.otp_expiry_minutes), max_attempts=settings.otp_max_attempts, sent_at=now()))
+    try:
+        email_service.send_otp(user.email, purpose, code)
+    except (OSError, smtplib.SMTPException) as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Verification email could not be sent. Check the SMTP configuration.") from exc
     db.commit()
-    email_service.send_otp(user.email, purpose, code)
 
 def consume_otp(db: Session, user: User, purpose: str, code: str) -> None:
     otp = db.scalar(select(AuthOtp).where(AuthOtp.user_id == user.id, AuthOtp.purpose == purpose, AuthOtp.used_at.is_(None)).order_by(AuthOtp.sent_at.desc()))
