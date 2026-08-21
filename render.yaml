@@ -22,7 +22,7 @@ services:
       - key: EMAIL_BACKEND
         value: console
       - key: FIREBASE_PROJECT_ID
-        sync: false
+        value: ai-memory-hub-a80a0
 
   - type: web
     name: ai-memory-hub-web
@@ -33,17 +33,17 @@ services:
       - key: VITE_API_BASE_URL
         value: https://ai-memory-hub-api.onrender.com/api/v1
       - key: VITE_FIREBASE_API_KEY
-        sync: false
+        value: AIzaSyBhBE-61d8SavPGE_DETT-Jd-ydo4iiA7M
       - key: VITE_FIREBASE_AUTH_DOMAIN
-        sync: false
+        value: ai-memory-hub-a80a0.firebaseapp.com
       - key: VITE_FIREBASE_PROJECT_ID
-        sync: false
+        value: ai-memory-hub-a80a0
       - key: VITE_FIREBASE_STORAGE_BUCKET
-        sync: false
+        value: ai-memory-hub-a80a0.firebasestorage.app
       - key: VITE_FIREBASE_MESSAGING_SENDER_ID
-        sync: false
+        value: "76184448679"
       - key: VITE_FIREBASE_APP_ID
-        sync: false
+        value: 1:76184448679:web:e32c7accc4c3b827e7f582
 
 databases:
   - name: ai-memory-hub-db
