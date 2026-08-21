@@ -25,7 +25,7 @@ services:
   - type: web
     name: ai-memory-hub-web
     runtime: static
-    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
     staticPublishPath: dist/public
     envVars:
       - key: VITE_API_BASE_URL
