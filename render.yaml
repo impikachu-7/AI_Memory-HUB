@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: ai-memory-hub-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-memory-hub-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OTP_PEPPER
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: FRONTEND_ORIGINS
+        value: https://ai-memory-hub-web.onrender.com
+      - key: EMAIL_BACKEND
+        value: console
+
+  - type: static
+    name: ai-memory-hub-web
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    staticPublishPath: dist/public
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://ai-memory-hub-api.onrender.com/api/v1
+
+databases:
+  - name: ai-memory-hub-db
+    plan: free
