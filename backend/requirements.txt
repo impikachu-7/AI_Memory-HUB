@@ -9,6 +9,7 @@ PyJWT>=2.9,<3
 pwdlib[argon2]>=0.2,<1
 cryptography>=43,<45
 google-auth>=2.35,<3
+firebase-admin>=7.0,<8
 requests>=2.32,<3
 chromadb>=1.0,<2
 openai>=1.54,<2

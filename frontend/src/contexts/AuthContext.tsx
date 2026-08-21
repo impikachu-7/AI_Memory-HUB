@@ -7,6 +7,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<AuthUser | null>;
+  signInWithFirebase: (idToken: string) => Promise<AuthUser | null>;
   verifyEmail: (email: string, otp: string) => Promise<AuthUser | null>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthUser | null>;
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     isAuthenticated: !!user,
     signIn: async (email, password) => applyTokenResponse(await api.auth.signIn(email, password)),
+    signInWithFirebase: async (idToken) => applyTokenResponse(await api.auth.signInWithFirebase(idToken)),
     verifyEmail: async (email, otp) => applyTokenResponse(await api.auth.verifyEmailOtp(email, otp)),
     logout: async () => {
       try {

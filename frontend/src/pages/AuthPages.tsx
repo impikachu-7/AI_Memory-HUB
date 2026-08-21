@@ -4,6 +4,7 @@ import { BrandLockup } from "@/components/BrandMark";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { api, ApiUnavailableError } from "@/services/api";
+import { signInWithFirebaseGoogle } from "@/services/firebase";
 import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -82,7 +83,7 @@ function GoogleButton({ onClick }: { onClick: () => void }) { return <button onC
 
 export default function AuthPage({ mode }: { mode: AuthMode }) {
   const [, navigate] = useLocation();
-  const { signIn, verifyEmail } = useAuth();
+  const { signIn, signInWithFirebase, verifyEmail } = useAuth();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [notice, setNotice] = useState(false);
   const [email, setEmail] = useState(() => sessionStorage.getItem("ai-memory-hub.pending-email") ?? "");
@@ -110,7 +111,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
 
   if (mode === "verify") return <AuthShell label="Email verification"><div><Link href="/register" className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Back to registration</Link><div className="mt-9"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[color:color-mix(in_oklab,var(--memory-teal)_13%,transparent)]"><Mail className="h-5 w-5 text-[color:var(--memory-teal)]" /></span><div className="mt-6"><AuthTitle title="Confirm your email" subtitle="Enter the six-digit code sent to your inbox. This first-time verification protects your workspace." /></div><div className="mt-8"><Field label="Email address" type="email" placeholder="you@example.com" icon={<Mail className="h-4 w-4" />} value={email} onChange={(event) => setEmail(event.target.value)} /><Field label="Verification code" placeholder="123456" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} /></div><div className="mt-5"><SolidButton onClick={verify}><ShieldCheck className="h-4 w-4" /> Verify email</SolidButton></div></div></div></AuthShell>;
 
-  if (mode === "google") return <AuthShell label="Google sign in"><div><Link href="/login" className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Other sign-in options</Link><div className="mt-9 rounded-2xl border border-border bg-card p-6 sm:p-8"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4285F4]/10 font-display text-2xl font-bold text-[#4285F4]">G</div><h2 className="font-display mt-6 text-[30px] font-semibold tracking-[-0.05em]">Continue with Google</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">Your Google account handles sign-in. AI Memory Hub will request only the access needed to identify your account.</p><GoogleButton onClick={() => { api.auth.beginGoogleOAuth().then(({ authorization_url }) => { window.location.assign(authorization_url); }).catch(showError); }} /><p className="mt-5 text-center text-[11px] leading-5 text-muted-foreground">By continuing, you will be redirected to your configured authentication service.</p></div></div></AuthShell>;
+  if (mode === "google") return <AuthShell label="Google sign in"><div><Link href="/login" className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Other sign-in options</Link><div className="mt-9 rounded-2xl border border-border bg-card p-6 sm:p-8"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4285F4]/10 font-display text-2xl font-bold text-[#4285F4]">G</div><h2 className="font-display mt-6 text-[30px] font-semibold tracking-[-0.05em]">Continue with Google</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">Sign in securely with your Firebase-enabled Google account.</p><GoogleButton onClick={() => signInWithFirebaseGoogle().then(signInWithFirebase).then(() => navigate("/chat")).catch(showError)} /><p className="mt-5 text-center text-[11px] leading-5 text-muted-foreground">Your Google account is handled by Firebase; AI Memory Hub receives only a verified identity token.</p></div></div></AuthShell>;
 
   if ((mode as AuthMode) === "verify") return null;
 

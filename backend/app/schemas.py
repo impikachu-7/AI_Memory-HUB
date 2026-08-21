@@ -38,6 +38,7 @@ class OtpRequest(BaseModel): email: EmailStr
 class OtpVerifyRequest(OtpRequest): otp: str = Field(pattern=r"^\d{6}$")
 class PasswordResetRequest(BaseModel): reset_token: str; new_password: str = Field(min_length=12, max_length=128)
 class GoogleCallbackRequest(BaseModel): code: str; state: str
+class FirebaseSignInRequest(BaseModel): id_token: str
 
 
 class ConversationCreate(BaseModel): title: str = Field(default="New conversation", max_length=300)

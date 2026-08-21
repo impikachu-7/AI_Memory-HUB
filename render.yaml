@@ -21,6 +21,8 @@ services:
         value: https://ai-memory-hub-web.onrender.com
       - key: EMAIL_BACKEND
         value: console
+      - key: FIREBASE_PROJECT_ID
+        sync: false
 
   - type: web
     name: ai-memory-hub-web
@@ -30,6 +32,18 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         value: https://ai-memory-hub-api.onrender.com/api/v1
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
 
 databases:
   - name: ai-memory-hub-db

@@ -34,6 +34,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   auth: {
     beginGoogleOAuth: () => request<{ authorization_url: string }>("/auth/google/start"),
+    signInWithFirebase: (idToken: string) => request<TokenResponse>("/auth/firebase", { method: "POST", body: JSON.stringify({ id_token: idToken }) }),
     signIn: (email: string, password: string) => request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
     register: (email: string, password: string, fullName: string) => request<{ detail: string }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, full_name: fullName || null }) }),
     verifyEmailOtp: (email: string, otp: string) => request<TokenResponse>("/auth/verify-email", { method: "POST", body: JSON.stringify({ email, otp }) }),

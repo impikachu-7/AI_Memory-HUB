@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
     google_oauth_redirect_uri: str | None = None
+    firebase_project_id: str | None = None
     email_backend: str = "console"
     email_from: str = "no-reply@example.com"
     smtp_host: str | None = None

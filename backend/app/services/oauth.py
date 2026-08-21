@@ -34,3 +34,19 @@ def validate_google_id_token(token: str) -> dict:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google account email is not verified")
     return claims
 
+def validate_firebase_id_token(token: str) -> dict:
+    settings = get_settings()
+    if not settings.firebase_project_id:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Firebase authentication is not configured")
+    try:
+        import firebase_admin
+        from firebase_admin import auth
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(options={"projectId": settings.firebase_project_id})
+        claims = auth.verify_id_token(token)
+    except Exception as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid Firebase identity token") from exc
+    if not claims.get("uid") or not claims.get("email") or not claims.get("email_verified"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Firebase account email is not verified")
+    return claims
+

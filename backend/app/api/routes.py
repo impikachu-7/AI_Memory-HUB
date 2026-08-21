@@ -14,7 +14,7 @@ from app.repositories.owned import OwnedRepository
 from app.schemas import *
 from app.services.auth import clear_login_failures, consume_otp, create_session, issue_otp, login_allowed, record_login_failure, revoke_all_sessions, revoke_session
 from app.services.credentials import decrypt_api_key, encrypt_api_key
-from app.services.oauth import exchange_google_code, google_authorization_url
+from app.services.oauth import exchange_google_code, google_authorization_url, validate_firebase_id_token
 from app.services.memory_engine import extract_from_conversation, retrieve, vector_store
 from app.services.llm import get_provider
 from app.services.llm import context_builder
@@ -118,6 +118,21 @@ def google_callback(body: GoogleCallbackRequest, db: Session = Depends(get_db)):
             db.add(user); db.flush()
         user.is_active, user.is_email_verified = True, True
         db.add(OAuthIdentity(user_id=user.id, provider='google', subject=claims['sub'])); db.commit(); db.refresh(user)
+    return TokenResponse(access_token=create_session(db, user), user=user)
+
+@router.post('/auth/firebase', response_model=TokenResponse)
+def firebase_sign_in(body: FirebaseSignInRequest, db: Session = Depends(get_db)):
+    claims = validate_firebase_id_token(body.id_token)
+    identity = db.scalar(select(OAuthIdentity).where(OAuthIdentity.provider == 'firebase', OAuthIdentity.subject == claims['uid']))
+    if identity:
+        user = db.get(User, identity.user_id)
+    else:
+        user = db.scalar(select(User).where(User.email == claims['email'].lower()))
+        if not user:
+            user = User(email=claims['email'].lower(), full_name=claims.get('name'), password_hash=hash_password(secrets.token_urlsafe(32)), is_active=True, is_email_verified=True)
+            db.add(user); db.flush()
+        user.is_active, user.is_email_verified = True, True
+        db.add(OAuthIdentity(user_id=user.id, provider='firebase', subject=claims['uid'])); db.commit(); db.refresh(user)
     return TokenResponse(access_token=create_session(db, user), user=user)
 
 @router.get('/users/me', response_model=UserRead)
