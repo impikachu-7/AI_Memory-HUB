@@ -22,8 +22,9 @@ services:
       - key: EMAIL_BACKEND
         value: console
 
-  - type: static
+  - type: web
     name: ai-memory-hub-web
+    runtime: static
     buildCommand: pnpm install --frozen-lockfile && pnpm build
     staticPublishPath: dist/public
     envVars:
