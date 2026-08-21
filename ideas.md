@@ -70,7 +70,7 @@ The mark is a **continuous double-arc thread** that creates a small protected no
 
 ## Frontend boundaries
 
-The React client will represent all UI state and call a typed service boundary in `client/src/services/api.ts`. The service functions define the future FastAPI contracts and deliberately throw a typed unavailable error when no backend is connected. Components will not fabricate persistence, credentials, user-scoped results, or hidden model switching. Initial rendered content is illustrative interface data only, clearly labelled where an API connection is required.
+The React frontend will represent all UI state and call a typed service boundary in `frontend/src/services/api.ts`. The service functions define the future FastAPI contracts and deliberately throw a typed unavailable error when no backend is connected. Components will not fabricate persistence, credentials, user-scoped results, or hidden model switching. Initial rendered content is illustrative interface data only, clearly labelled where an API connection is required.
 
 The route map will provide public marketing and authentication experiences alongside private workbench views for chat, conversation history, memory dashboard/search/categories/timeline/detail, model selection, provider settings, API key management, analytics, privacy, profile, and application settings.
 
