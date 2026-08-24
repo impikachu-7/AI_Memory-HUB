@@ -2,14 +2,14 @@
 import { api } from "@/services/api";
 import { AppShell, NewConversationButton } from "@/components/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
-import type { AvailableModel, ConversationSummary, MemoryRecord, Message, ModelRead, ProviderRead } from "@/lib/types";
+import type { ConversationSummary, MemoryRecord, Message, ModelRead, ProviderRead } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   Archive, ArrowDownToLine, ArrowRight, BarChart3, Bell, Bot, BrainCircuit, CalendarClock, Check, ChevronDown, ChevronsUpDown, CircleAlert, Clock3, Copy, Download, Edit3, Ellipsis, ExternalLink, FileText, Filter, FolderOpen, Gauge, Globe2, KeyRound, LayoutDashboard, LockKeyhole, Mail, MessageSquareText, MoreHorizontal, Network, PanelRightClose, Pencil, Pin, Plus, RefreshCw, Search, SendHorizontal, Settings2, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Tags, Trash2, Undo2, UserRound, X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 
 const conversations: ConversationSummary[] = [
   { id: "c_203", title: "Planning the knowledge system", updatedAt: "Just now", model: "Gemini 2.5 Pro", memoryUsed: true },
@@ -17,19 +17,7 @@ const conversations: ConversationSummary[] = [
   { id: "c_201", title: "Research synthesis", updatedAt: "Yesterday", model: "Gemini 2.5 Flash", memoryUsed: false },
   { id: "c_200", title: "Quarterly reflection", updatedAt: "Aug 14", model: "Gemini 2.5 Pro", memoryUsed: true },
 ];
-const memories: MemoryRecord[] = [
-  { id: "m_104", title: "Writing preference", content: "Prefers concise, structured explanations with a clear next action and minimal jargon.", category: "Preferences", source: "Planning the knowledge system", createdAt: "Aug 16, 2026", updatedAt: "Today, 10:42", pinned: true, status: "active" },
-  { id: "m_103", title: "Current product focus", content: "AI Memory Hub should keep long-term memory separate from raw conversation history and never switch a user’s model automatically.", category: "Projects", source: "Architecture review", createdAt: "Aug 15, 2026", updatedAt: "Today, 09:16", status: "active" },
-  { id: "m_102", title: "Research process", content: "For external claims, prefers sources to be checked before presenting a conclusion or recommendation.", category: "Work style", source: "Research synthesis", createdAt: "Aug 12, 2026", updatedAt: "Aug 16, 14:08", status: "active" },
-  { id: "m_098", title: "Old integration note", content: "Historical note from the prior provider exploration, retained for reference.", category: "Archive", source: "Provider notes", createdAt: "Jul 27, 2026", updatedAt: "Aug 2, 10:20", status: "archived" },
-];
-const availableModels: AvailableModel[] = [
-  { id: "gemini-2.5-pro", providerId: "google", providerName: "Google", name: "Gemini 2.5 Pro", context: "Best for complex reasoning" },
-  { id: "gemini-2.5-flash", providerId: "google", providerName: "Google", name: "Gemini 2.5 Flash", context: "Fast everyday work" },
-  { id: "qwen2.5:14b", providerId: "ollama", providerName: "Ollama", name: "Qwen 2.5 14B", context: "Installed locally", local: true },
-  { id: "llama3.3:70b", providerId: "ollama", providerName: "Ollama", name: "Llama 3.3 70B", context: "Installed locally", local: true },
-];
-const activeModel = availableModels[0];
+const memories: MemoryRecord[] = [];
 
 function backendToast(action: string) { toast.info("Backend action required", { description: `${action} is ready for the FastAPI service. No data was changed in this preview.` }); }
 function IndexLabel({ children }: { children: React.ReactNode }) { return <p className="index-label">{children}</p>; }
@@ -37,7 +25,7 @@ function PageIntro({ label, title, copy, action }: { label?: string; title: stri
 function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) { return <section className={cn("rounded-2xl border border-border bg-card shadow-[0_14px_36px_-30px_rgba(21,39,35,0.35)]", className)}>{children}</section>; }
 function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "teal" | "neutral" | "warning" | "dark" }) { const styles = { teal: "border-[color:color-mix(in_oklab,var(--memory-teal)_28%,transparent)] bg-[color:color-mix(in_oklab,var(--memory-teal)_9%,transparent)] text-[color:var(--memory-teal-deep)] dark:text-[color:var(--memory-teal-light)]", neutral: "border-border bg-secondary text-muted-foreground", warning: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300", dark: "border-white/10 bg-white/10 text-white/75" }; return <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold", styles[tone])}>{children}</span>; }
 function IconButton({ label, children, onClick, className = "" }: { label: string; children: React.ReactNode; onClick?: () => void; className?: string }) { return <button onClick={onClick} aria-label={label} title={label} className={cn("inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-foreground active:scale-[0.97]", className)}>{children}</button>; }
-function Button({ children, onClick, variant = "primary", className = "" }: { children: React.ReactNode; onClick?: () => void; variant?: "primary" | "secondary" | "danger" | "dark"; className?: string }) { const variants = { primary: "bg-[color:var(--memory-teal)] text-white hover:bg-[color:var(--memory-teal-deep)]", secondary: "border border-border bg-card text-foreground hover:bg-secondary", danger: "bg-red-600 text-white hover:bg-red-700", dark: "bg-foreground text-background hover:opacity-90" }; return <button onClick={onClick} className={cn("inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3.5 text-xs font-bold transition duration-200 hover:-translate-y-0.5 active:scale-[0.97]", variants[variant], className)}>{children}</button>; }
+function Button({ children, onClick, variant = "primary", className = "", disabled = false }: { children: React.ReactNode; onClick?: () => void; variant?: "primary" | "secondary" | "danger" | "dark"; className?: string; disabled?: boolean }) { const variants = { primary: "bg-[color:var(--memory-teal)] text-white hover:bg-[color:var(--memory-teal-deep)]", secondary: "border border-border bg-card text-foreground hover:bg-secondary", danger: "bg-red-600 text-white hover:bg-red-700", dark: "bg-foreground text-background hover:opacity-90" }; return <button onClick={onClick} disabled={disabled} className={cn("inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3.5 text-xs font-bold transition duration-200 hover:-translate-y-0.5 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60", variants[variant], className)}>{children}</button>; }
 function EmptyState({ icon: Icon = BrainCircuit, title, copy, action }: { icon?: typeof BrainCircuit; title: string; copy: string; action?: React.ReactNode }) { return <div className="flex min-h-[250px] flex-col items-center justify-center p-8 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[color:color-mix(in_oklab,var(--memory-teal)_11%,transparent)]"><Icon className="h-5 w-5 text-[color:var(--memory-teal)]" /></span><h3 className="font-display mt-4 text-lg font-semibold tracking-[-0.035em]">{title}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{copy}</p>{action && <div className="mt-5">{action}</div>}</div>; }
 function StatCard({ label, value, detail, icon: Icon, trend }: { label: string; value: string; detail: string; icon: typeof BrainCircuit; trend?: string }) { return <Panel className="p-5"><div className="flex items-start justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:color-mix(in_oklab,var(--memory-teal)_11%,transparent)]"><Icon className="h-[18px] w-[18px] text-[color:var(--memory-teal)]" /></span>{trend && <Pill tone="teal">{trend}</Pill>}</div><p className="font-display mt-5 text-[28px] font-semibold tracking-[-0.055em]">{value}</p><p className="mt-1 text-xs font-bold">{label}</p><p className="mt-2 text-[11px] text-muted-foreground">{detail}</p></Panel>; }
 
@@ -449,11 +437,15 @@ function MemoryDetailsPage() {
 function ModelSelectorPage() {
   const [availableModels, setAvailableModels] = useState<ModelRead[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelRead | null>(null);
+  const [conversationsList, setConversationsList] = useState<ConversationSummary[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
 
   useEffect(() => {
-    api.models.listRegistry()
-      .then((mods) => {
+    Promise.all([api.models.listRegistry(), api.conversations.list()])
+      .then(([mods, convs]) => {
         setAvailableModels(mods);
+        setConversationsList(convs);
+        setActiveConvId(convs[0]?.id ?? null);
         if (mods.length > 0) {
           setSelectedModel(mods[0]);
         }
@@ -467,7 +459,6 @@ const handleSelectModel = async (model: ModelRead) => {
   console.log("MODEL CLICKED:", model);
 
   setSelectedModel(model);
-  setModelOpen(false);
 
   if (!activeConvId) {
     console.error("NO ACTIVE CONVERSATION");
@@ -595,6 +586,156 @@ function LiveMemoryPage() { const [records, setRecords] = useState<MemoryRecord[
 
 function LiveSearchPage() { const [query, setQuery] = useState(""); const [results, setResults] = useState<MemoryRecord[]>([]); useEffect(() => { const timer = window.setTimeout(() => (query.trim() ? api.memories.search(query) : api.memories.list()).then(setResults).catch(() => toast.error("Memory search failed")), 250); return () => window.clearTimeout(timer); }, [query]); return <AppShell title="Search Memories" eyebrow="Memory"><div className="mx-auto max-w-[1000px]"><PageIntro label="Find context" title="Search the memory layer" copy="Search only long-term memory records." /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search memories by idea, category, or source…" className="h-14 w-full rounded-2xl border border-input bg-card px-5 text-sm outline-none focus:border-[color:var(--memory-teal)]" /><Panel className="mt-6 overflow-hidden">{results.length ? <div className="divide-y divide-border">{results.filter((memory) => memory.status === "active").map((memory) => <MemoryRow key={memory.id} memory={memory} />)}</div> : <EmptyState icon={Search} title="No memory matches that search" copy="Try another phrase or add a memory to begin." />}</Panel></div></AppShell>; }
 
+function ConnectedMemoryPage() {
+  const [records, setRecords] = useState<MemoryRecord[]>([]);
+  const [content, setContent] = useState("");
+  const [category, setCategory] = useState("Other");
+  const [source, setSource] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.memories.list().then(setRecords).catch(() => setError("Failed to load memories.")).finally(() => setIsLoading(false));
+  }, []);
+
+  const createMemory = async () => {
+    if (!content.trim()) {
+      setError("Memory content is required.");
+      return;
+    }
+    setIsCreating(true);
+    setError("");
+    try {
+      const record = await api.memories.create({ content: content.trim(), category, source_conversation_id: source.trim() || null, importance: 0.5, confidence: 0.7 });
+      setRecords((current) => [record, ...current]);
+      setContent("");
+      setSource("");
+      toast.success("Memory created");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to create memory.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const active = records.filter((record) => record.status === "active");
+  return <AppShell title="Memory Dashboard" eyebrow="Memory" action={<Button onClick={createMemory} disabled={isCreating}><Plus className="h-4 w-4" /> {isCreating ? "Creating..." : "Add memory"}</Button>}><div className="mx-auto max-w-[1200px]"><PageIntro label="Long-term memory" title="A clear record of what you keep" copy="Review the context available to future conversations." /><Panel className="mb-6 p-5"><div className="grid gap-3 lg:grid-cols-[1fr_180px_1fr_auto]"><textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="Capture a durable memory" rows={2} className="resize-none rounded-xl border border-input bg-background p-3 text-sm outline-none focus:border-[color:var(--memory-teal)]" /><select value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 rounded-xl border border-input bg-background px-3 text-xs outline-none"><option>Other</option><option>Personal</option><option>Education</option><option>Career</option><option>Preferences</option><option>Projects</option><option>Goals</option><option>Skills</option></select><input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source conversation ID (optional)" className="h-10 rounded-xl border border-input bg-background px-3 text-xs outline-none focus:border-[color:var(--memory-teal)]" /><Button onClick={createMemory} disabled={isCreating}><Plus className="h-4 w-4" /> Create</Button></div>{error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}</Panel>{isLoading ? <Panel className="p-8 text-center text-sm text-muted-foreground">Loading memories...</Panel> : active.length ? <Panel className="overflow-hidden"><div className="divide-y divide-border">{active.map((memory) => <MemoryRow key={memory.id} memory={memory} />)}</div></Panel> : <Panel><EmptyState icon={BrainCircuit} title="No memories yet" copy="Approved long-term context will appear here." /></Panel>}</div></AppShell>;
+}
+
+function ConnectedSearchPage() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<MemoryRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setIsLoading(true);
+      const request = query.trim() ? api.memories.search(query, 8) : api.memories.list();
+      request.then((records) => { if (!cancelled) setResults(records); }).catch(() => { if (!cancelled) setError("Memory search failed."); }).finally(() => { if (!cancelled) setIsLoading(false); });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [query]);
+
+  return <AppShell title="Search Memories" eyebrow="Memory"><div className="mx-auto max-w-[1000px]"><PageIntro label="Find context" title="Search the memory layer" copy="Search only long-term memory records." /><input autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setError(""); }} placeholder="Search memories by idea, category, or source…" className="h-14 w-full rounded-2xl border border-input bg-card px-5 text-sm outline-none focus:border-[color:var(--memory-teal)]" />{error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}<Panel className="mt-6 overflow-hidden">{isLoading ? <p className="p-8 text-center text-sm text-muted-foreground">Searching memories...</p> : results.length ? <div className="divide-y divide-border">{results.filter((memory) => memory.status === "active").map((memory) => <MemoryRow key={memory.id} memory={memory} />)}</div> : <EmptyState icon={Search} title="No memory matches that search" copy="Try another phrase or add a memory to begin." />}</Panel></div></AppShell>;
+}
+
+function ConnectedDetailsPage() {
+  const [, params] = useRoute("/memory/:id");
+  const [, navigate] = useLocation();
+  const [memory, setMemory] = useState<MemoryRecord | null>(null);
+  const [content, setContent] = useState("");
+  const [category, setCategory] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.memories.list().then((records) => {
+      const selected = records.find((record) => record.id === params?.id) ?? null;
+      setMemory(selected);
+      setContent(selected?.content ?? "");
+      setCategory(selected?.category ?? "");
+      if (!selected) setError("Memory not found.");
+    }).catch(() => setError("Failed to load memory.")).finally(() => setIsLoading(false));
+  }, [params?.id]);
+
+  const updateMemory = async () => {
+    if (!memory || !content.trim()) return;
+    setIsSaving(true);
+    try {
+      const updated = await api.memories.update(memory.id, { content: content.trim(), category });
+      setMemory(updated);
+      setEditing(false);
+      toast.success("Memory updated");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to update memory.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const archiveOrRestore = async () => {
+    if (!memory) return;
+    try {
+      const updated = memory.status === "archived" ? await api.memories.restore(memory.id) : await api.memories.archive(memory.id);
+      setMemory(updated);
+      toast.success(updated.status === "archived" ? "Memory archived" : "Memory restored");
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Failed to update memory."); }
+  };
+
+  const pinMemory = async () => {
+    if (!memory) return;
+    try { setMemory(await api.memories.pin(memory.id)); toast.success("Memory pinned"); }
+    catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Failed to pin memory."); }
+  };
+
+  const deleteMemory = async () => {
+    if (!memory) return;
+    try { await api.memories.remove(memory.id); toast.success("Memory deleted"); navigate("/memory"); }
+    catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Failed to delete memory."); }
+  };
+
+  if (isLoading) return <AppShell title="Memory Details" eyebrow="Memory"><Panel className="mx-auto max-w-[1040px] p-8 text-center text-sm text-muted-foreground">Loading memory...</Panel></AppShell>;
+  if (!memory) return <AppShell title="Memory Details" eyebrow="Memory"><Panel className="mx-auto max-w-[1040px] p-8 text-center"><p className="text-sm">{error || "Memory not found."}</p><Button className="mt-5" onClick={() => navigate("/memory")}>Back to memories</Button></Panel></AppShell>;
+  return <AppShell title="Memory Details" eyebrow="Memory"><div className="mx-auto max-w-[1040px]"><button onClick={() => navigate("/memory")} className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground"><ArrowRight className="h-3.5 w-3.5 rotate-180" /> All memories</button><Panel className="p-5 sm:p-7"><div className="flex flex-wrap items-center gap-2"><Pill tone="teal">{memory.category}</Pill><Pill tone={memory.status === "archived" ? "neutral" : "teal"}>{memory.status}</Pill>{memory.pinned && <Pill tone="teal"><Pin className="h-3 w-3" /> Pinned</Pill>}</div>{editing ? <div className="mt-6 space-y-4"><textarea value={content} onChange={(event) => setContent(event.target.value)} rows={6} className="w-full rounded-xl border border-input bg-background p-3 text-sm outline-none focus:border-[color:var(--memory-teal)]" /><input value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs outline-none" /><div className="flex gap-2"><Button onClick={updateMemory} disabled={isSaving}>{isSaving ? "Saving..." : "Save changes"}</Button><Button variant="secondary" onClick={() => { setContent(memory.content); setCategory(memory.category); setEditing(false); }}>Cancel</Button></div></div> : <><div className="mt-6 flex items-start justify-between gap-4"><div><h2 className="font-display text-[32px] font-semibold tracking-[-0.055em]">{memory.title}</h2><p className="mt-4 max-w-2xl whitespace-pre-wrap text-[15px] leading-7 text-muted-foreground">{memory.content}</p></div><IconButton label="Edit memory" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /></IconButton></div><div className="mt-8 border-t border-border pt-6 text-xs"><p className="text-muted-foreground">Source: <span className="font-bold text-foreground">{memory.source}</span></p><p className="mt-2 text-muted-foreground">Created {memory.createdAt} · Updated {memory.updatedAt}</p></div><div className="mt-6 flex flex-wrap gap-2"><Button variant="secondary" onClick={archiveOrRestore}>{memory.status === "archived" ? <Undo2 className="h-4 w-4" /> : <Archive className="h-4 w-4" />}{memory.status === "archived" ? "Restore memory" : "Archive memory"}</Button><Button variant="secondary" onClick={pinMemory}><Pin className="h-4 w-4" /> {memory.pinned ? "Pinned" : "Pin memory"}</Button><Button variant="danger" onClick={deleteMemory}><Trash2 className="h-4 w-4" /> Delete memory</Button></div></>}{error && <p className="mt-4 text-xs text-red-600 dark:text-red-400">{error}</p>}</Panel></div></AppShell>;
+}
+
+function ConnectedCategoriesPage() {
+  const [records, setRecords] = useState<MemoryRecord[]>([]);
+  useEffect(() => { api.memories.list().then(setRecords).catch(() => toast.error("Failed to load memories")); }, []);
+  const groups = Array.from(records.reduce((grouped, record) => { grouped.set(record.category, (grouped.get(record.category) ?? 0) + 1); return grouped; }, new Map<string, number>()));
+  return <AppShell title="Memory Categories" eyebrow="Memory"><div className="mx-auto max-w-[1100px]"><PageIntro label="Organize your context" title="Categories that fit your work" copy="Browse the categories represented in your long-term memory." /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{groups.map(([name, count]) => <Link href="/memory/search" key={name} className="rounded-2xl border border-border bg-card p-5"><p className="font-display text-[23px] font-semibold">{name}</p><p className="mt-3 text-sm text-muted-foreground">{count} memor{count === 1 ? "y" : "ies"}</p></Link>)}</div>{!groups.length && <Panel><EmptyState icon={Tags} title="No categories yet" copy="Create a memory to begin organizing your context." /></Panel>}</div></AppShell>;
+}
+
+function ConnectedTimelinePage() {
+  const [records, setRecords] = useState<MemoryRecord[]>([]);
+  useEffect(() => { api.memories.list().then(setRecords).catch(() => toast.error("Failed to load memories")); }, []);
+  return <AppShell title="Memory Timeline" eyebrow="Memory"><div className="mx-auto max-w-[980px]"><PageIntro label="The memory thread" title="See how your long-term context evolved" copy="Review records by creation date." /><div className="space-y-3">{records.map((memory) => <Panel key={memory.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><Link href={`/memory/${memory.id}`} className="text-sm font-bold hover:underline">{memory.title}</Link><p className="mt-2 text-xs text-muted-foreground">{memory.content}</p></div><Pill tone={memory.status === "archived" ? "neutral" : "teal"}>{memory.createdAt}</Pill></div></Panel>)}{!records.length && <EmptyState icon={Clock3} title="No memories yet" copy="Create a memory to begin your timeline." />}</div></div></AppShell>;
+}
+
+function ConnectedPrivacyPage() {
+  const downloadExport = async (kind: "memories" | "conversations") => {
+    try {
+      const blob = kind === "memories" ? await api.memories.export() : await api.conversations.export();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ai-memory-hub-${kind}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${kind === "memories" ? "Memory" : "Conversation"} export prepared`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Export failed");
+    }
+  };
+
+  return <AppShell title="Privacy Center" eyebrow="Control center"><div className="mx-auto max-w-[1100px]"><PageIntro label="Your data controls" title="Control the record, on your terms" copy="Export your user-owned memories and conversations from the authenticated backend." /><div className="grid gap-4 sm:grid-cols-2"><Panel className="p-5"><Download className="h-5 w-5 text-[color:var(--memory-teal)]" /><p className="mt-4 text-sm font-bold">Export memories</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Download your long-term memory records.</p><Button className="mt-5" variant="secondary" onClick={() => downloadExport("memories")}><Download className="h-4 w-4" /> Prepare memory export</Button></Panel><Panel className="p-5"><FileText className="h-5 w-5 text-[color:var(--memory-teal)]" /><p className="mt-4 text-sm font-bold">Export conversations</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Download your conversation history.</p><Button className="mt-5" variant="secondary" onClick={() => downloadExport("conversations")}><Download className="h-4 w-4" /> Prepare conversation export</Button></Panel></div></div></AppShell>;
+}
+
 function LiveProfilePage() { const { user, refresh } = useAuth(); const [name, setName] = useState(user?.full_name ?? ""); const save = () => api.profile.update({ full_name: name || null }).then(() => refresh()).then(() => toast.success("Profile saved")).catch(() => toast.error("Failed to save profile")); return <AppShell title="User Profile" eyebrow="Control center"><div className="mx-auto max-w-[900px]"><PageIntro label="Personal workspace" title="Your profile and identity" copy="Your profile identifies the account that owns this workspace." action={<Button onClick={save}><Check className="h-4 w-4" /> Save changes</Button>} /><Panel className="p-6"><label className="block max-w-md"><span className="mb-2 block text-xs font-bold">Full name</span><input value={name} onChange={(event) => setName(event.target.value)} className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs outline-none focus:border-[color:var(--memory-teal)]" /></label><p className="mt-5 text-xs text-muted-foreground">{user?.email}</p></Panel></div></AppShell>; }
 
 function LiveConversationsPage() { const [items, setItems] = useState<ConversationSummary[]>([]); useEffect(() => { api.conversations.list().then(setItems).catch(() => toast.error("Failed to load conversations")); }, []); return <AppShell title="Conversation History" eyebrow="Workspace"><div className="mx-auto max-w-[1160px]"><PageIntro label="Full record" title="Your conversation history" copy="Review the chronological record kept for your account." action={<Button variant="secondary" onClick={() => api.conversations.export().then(() => toast.success("Conversation export prepared")).catch(() => toast.error("Export failed"))}><Download className="h-4 w-4" /> Export history</Button>} /><Panel className="overflow-hidden"><div className="divide-y divide-border">{items.map((conversation) => <Link key={conversation.id} href="/chat" className="flex items-center gap-4 px-5 py-4 hover:bg-secondary/60"><MessageSquareText className="h-4 w-4 text-muted-foreground" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{conversation.title}</span><span className="mt-1 block text-xs text-muted-foreground">{conversation.model} · {conversation.updatedAt}</span></span><ArrowRight className="h-4 w-4 text-muted-foreground" /></Link>)}{!items.length && <EmptyState icon={MessageSquareText} title="No conversations yet" copy="Start a chat to create your first conversation." />}</div></Panel></div></AppShell>; }
@@ -606,6 +747,6 @@ export function WorkspaceRoute({ page }: { page: "chat" | "conversations" | "mem
     if (!isLoading && !isAuthenticated) navigate("/login");
   }, [isAuthenticated, isLoading, navigate]);
   if (isLoading || !isAuthenticated) return <div className="min-h-screen bg-background" />;
-  const pages = { chat: <ChatPage />, conversations: <LiveConversationsPage />, memory: <LiveMemoryPage />, search: <LiveSearchPage />, categories: <CategoriesPage />, timeline: <TimelinePage />, details: <MemoryDetailsPage />, models: <ModelSelectorPage />, providers: <ProvidersPage />, keys: <ApiKeysPage />, analytics: <LiveAnalyticsPage />, privacy: <PrivacyPage />, profile: <LiveProfilePage />, settings: <SettingsPage /> };
+  const pages = { chat: <ChatPage />, conversations: <LiveConversationsPage />, memory: <ConnectedMemoryPage />, search: <ConnectedSearchPage />, categories: <ConnectedCategoriesPage />, timeline: <ConnectedTimelinePage />, details: <ConnectedDetailsPage />, models: <ModelSelectorPage />, providers: <ProvidersPage />, keys: <ApiKeysPage />, analytics: <LiveAnalyticsPage />, privacy: <ConnectedPrivacyPage />, profile: <LiveProfilePage />, settings: <SettingsPage /> };
   return pages[page];
 }

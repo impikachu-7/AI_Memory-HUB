@@ -22,6 +22,7 @@ function Router() {
       <Route path="/auth/google/callback"><GoogleCallbackPage /></Route>
       <Route path="/verify-email"><AuthPage mode="verify" /></Route>
       <Route path="/forgot-password"><AuthPage mode="forgot" /></Route>
+      <Route path="/reset-password"><AuthPage mode="reset" /></Route>
       <Route path="/chat"><WorkspaceRoute page="chat" /></Route>
       <Route path="/conversations"><WorkspaceRoute page="conversations" /></Route>
       <Route path="/memory/search"><WorkspaceRoute page="search" /></Route>

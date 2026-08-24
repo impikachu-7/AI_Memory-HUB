@@ -1,23 +1,18 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { api, setAccessToken } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { setAccessToken } from "@/services/api";
 
 export default function GoogleCallbackPage() {
   const [, navigate] = useLocation();
+  const { refresh } = useAuth();
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("access_token");
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    setAccessToken(token);
-
-    api.auth.me()
-      .then(() => navigate("/chat"))
-      .catch(() => {
+    refresh().then((user) => {
+      if (user) {
+        navigate("/chat");
+        return;
+      }
         setAccessToken(null);
         navigate("/login");
       });

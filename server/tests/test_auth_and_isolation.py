@@ -3,6 +3,7 @@ os.environ['JWT_SECRET'] = 'test-secret-that-is-long-enough-for-testing'
 os.environ['OTP_PEPPER'] = 'separate-test-otp-pepper'
 os.environ['EMAIL_BACKEND'] = 'test'
 os.environ['OTP_RESEND_COOLDOWN_SECONDS'] = '0'
+os.environ['COOKIE_SECURE'] = 'false'
 from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -14,6 +15,8 @@ from app.models import AuthOtp, User
 from app.services.email import email_service
 from app.services.oauth import validate_google_id_token
 from app.core.config import get_settings
+from app.api import routes as api_routes
+import jwt
 
 engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine)
@@ -94,6 +97,45 @@ def test_google_token_validation_rejects_unverifiable_tokens():
     try: validate_google_id_token('not-a-google-token')
     except Exception as exc: assert getattr(exc, 'status_code', 0) in {401, 503}
     else: raise AssertionError('Invalid token was accepted')
+
+def oauth_state():
+    settings = get_settings()
+    return jwt.encode({'nonce': 'test-nonce', 'exp': datetime.now(UTC) + timedelta(minutes=10)}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+def test_google_callback_rejects_missing_state_cookie():
+    state = oauth_state()
+    client.cookies.clear()
+    response = client.get('/api/v1/auth/google/callback', params={'code': 'test-code', 'state': state})
+    assert response.status_code == 400
+
+def test_google_callback_rejects_mismatched_state_cookie():
+    state = oauth_state()
+    client.cookies.set('ai_memory_hub_oauth_state', oauth_state())
+    response = client.get('/api/v1/auth/google/callback', params={'code': 'test-code', 'state': state + 'mismatch'})
+    assert response.status_code == 400
+
+def test_google_callback_rejects_invalid_state():
+    client.cookies.set('ai_memory_hub_oauth_state', 'invalid-state')
+    response = client.get('/api/v1/auth/google/callback', params={'code': 'test-code', 'state': 'invalid-state'})
+    assert response.status_code == 400
+
+def test_google_callback_sets_cookie_session_and_rejects_state_replay(monkeypatch):
+    state = oauth_state()
+    user_subject = 'google-test-subject'
+    monkeypatch.setattr(api_routes, 'exchange_google_code', lambda _: {'sub': user_subject, 'email': 'oauth-cookie@example.com', 'email_verified': True, 'name': 'OAuth Test'})
+    client.cookies.set('ai_memory_hub_oauth_state', state)
+
+    response = client.get('/api/v1/auth/google/callback', params={'code': 'test-code', 'state': state}, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert 'access_token' not in response.headers['location']
+    assert 'ai_memory_hub_session=' in response.headers['set-cookie']
+    assert 'ai_memory_hub_oauth_state=' in response.headers['set-cookie']
+    assert client.get('/api/v1/auth/me').status_code == 200
+
+    client.cookies.clear()
+    replay = client.get('/api/v1/auth/google/callback', params={'code': 'test-code', 'state': state}, follow_redirects=False)
+    assert replay.status_code == 400
 
 def test_profile_update_is_user_scoped():
     token = signup('profile-phase6@example.com')

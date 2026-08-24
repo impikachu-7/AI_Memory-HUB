@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
@@ -7,11 +7,16 @@ from app.database import get_db
 from app.models import AuthSession, User
 
 bearer = HTTPBearer(auto_error=False)
+AUTH_COOKIE_NAME = "ai_memory_hub_session"
 
 
-def current_token(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
-    if not credentials: raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    return decode_access_token(credentials.credentials)
+def current_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    session_cookie: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
+) -> dict:
+    token = credentials.credentials if credentials else session_cookie
+    if not token: raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return decode_access_token(token)
 
 
 def current_user(token: dict = Depends(current_token), db: Session = Depends(get_db)) -> User:

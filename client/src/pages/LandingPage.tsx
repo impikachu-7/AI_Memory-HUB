@@ -5,9 +5,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ArrowRight, Check, Database, Fingerprint, GitBranch, ShieldCheck, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 
-const HERO_IMAGE = "/manus-storage/ai-memory-hub-hero_96907410.jpg";
-const THREAD_IMAGE = "/manus-storage/ai-memory-hub-memory-thread_d9816713.jpg";
-const VAULT_IMAGE = "/manus-storage/ai-memory-hub-private-vault_0e29ee8d.jpg";
+const HERO_IMAGE = "/ai-memory-hub-logo.svg";
+const THREAD_IMAGE = "/ai-memory-hub-logo.svg";
+const VAULT_IMAGE = "/ai-memory-hub-logo.svg";
 
 const features = [
   { icon: Database, label: "One memory layer", description: "Keep durable context separate from conversation history and carry it between models." },

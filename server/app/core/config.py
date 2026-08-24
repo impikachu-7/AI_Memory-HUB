@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "postgresql+psycopg://memoryhub:memoryhub@localhost:5432/memoryhub"
     jwt_secret: str
+    provider_encryption_key: str | None = None
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
     otp_pepper: str | None = None

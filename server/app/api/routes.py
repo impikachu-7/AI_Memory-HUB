@@ -1,16 +1,16 @@
 from fastapi.responses import RedirectResponse
 from datetime import UTC, datetime, timedelta
+import hmac
 import json
 import logging
 import secrets
-from urllib.parse import urlencode
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.core.security import decode_access_token, hash_password, verify_password
 from app.database import get_db
-from app.dependencies import current_token, current_user
+from app.dependencies import AUTH_COOKIE_NAME, current_token, current_user
 from app.models import Conversation, Memory, Message, ModelRegistry, OAuthIdentity, ProviderConfiguration, User
 from app.repositories.owned import OwnedRepository
 from app.schemas import *
@@ -23,6 +23,15 @@ from app.services.llm import context_builder
 from app.services.data_export import export_conversations, export_memories, export_user_data
 
 log = logging.getLogger(__name__)
+OAUTH_STATE_COOKIE_NAME = "ai_memory_hub_oauth_state"
+
+
+def secure_cookie_setting(settings) -> bool:
+    local_origin = any(
+        origin.strip().startswith(('http://localhost', 'http://127.0.0.1'))
+        for origin in settings.frontend_origins.split(',')
+    )
+    return settings.cookie_secure and not local_origin
 
 router = APIRouter()
 conversations, messages, memories, providers = (OwnedRepository(x) for x in (Conversation, Message, Memory, ProviderConfiguration))
@@ -97,21 +106,36 @@ def reset_password(body: PasswordResetRequest, db: Session = Depends(get_db)):
 def auth_me(user: User = Depends(current_user)): return user
 
 @router.get('/auth/google/start')
-def google_start():
+def google_start(response: Response):
     # Signed state is validated on callback; it contains no account credentials.
     from app.core.config import get_settings
     from jwt import encode
-    state = encode({'nonce': secrets.token_urlsafe(24), 'exp': datetime.now(UTC) + timedelta(minutes=10)}, get_settings().jwt_secret, algorithm=get_settings().jwt_algorithm)
+    settings = get_settings()
+    state = encode({'nonce': secrets.token_urlsafe(24), 'exp': datetime.now(UTC) + timedelta(minutes=10)}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    response.set_cookie(
+        key=OAUTH_STATE_COOKIE_NAME,
+        value=state,
+        max_age=600,
+        httponly=True,
+        secure=secure_cookie_setting(settings),
+        samesite=settings.cookie_samesite,
+        domain=settings.cookie_domain,
+        path="/api/v1/auth/google",
+    )
     return {'authorization_url': google_authorization_url(state)}
 
 @router.get('/auth/google/callback')
 def google_callback(
     code: str,
     state: str,
+    oauth_state: str | None = Cookie(default=None, alias=OAUTH_STATE_COOKIE_NAME),
     db: Session = Depends(get_db),
 ):
     from app.core.config import get_settings
     import jwt
+
+    if not oauth_state or not hmac.compare_digest(state, oauth_state):
+        raise HTTPException(400, 'Invalid OAuth state')
 
     try:
         state_claims = jwt.decode(
@@ -180,10 +204,23 @@ def google_callback(
     if not frontend_origin:
         raise HTTPException(503, 'Frontend origin is not configured')
 
-    return RedirectResponse(
-        url=f"{frontend_origin}/auth/google/callback?{urlencode({'access_token': access_token})}",
+    response = RedirectResponse(
+        url=f"{frontend_origin}/auth/google/callback",
         status_code=303,
     )
+    secure_cookie = secure_cookie_setting(settings)
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=access_token,
+        max_age=settings.access_token_minutes * 60,
+        httponly=True,
+        secure=secure_cookie,
+        samesite=settings.cookie_samesite,
+        domain=settings.cookie_domain,
+        path="/",
+    )
+    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, path="/api/v1/auth/google", domain=settings.cookie_domain)
+    return response
 
 @router.get('/users/me', response_model=UserRead)
 def me(user: User = Depends(current_user)): return user
@@ -398,7 +435,7 @@ def pin_memory(memory_id: str, db: Session = Depends(get_db), user: User = Depen
     item = memories.get(db, user.id, memory_id); item.is_pinned = True; db.commit(); db.refresh(item); vector_store.upsert(item); return item
 
 @router.get('/memories/search', response_model=list[MemorySearchResult])
-def search_memories(query: str, limit: int = 8, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def search_memories(query: str, limit: int = Query(default=8, ge=1, le=20), db: Session = Depends(get_db), user: User = Depends(current_user)):
     return [MemorySearchResult(**MemoryRead.model_validate(memory).model_dump(), score=score) for memory, score in retrieve(db, user.id, query, limit)]
 
 @router.get('/providers', response_model=list[ProviderRead])

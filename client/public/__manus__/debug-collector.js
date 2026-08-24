@@ -238,15 +238,29 @@
   }
 
   function logUiEvent(kind, payload) {
+    var safeUrl = new URL(location.href);
+    safeUrl.search = "";
+    safeUrl.hash = "";
     var entry = {
       timestamp: Date.now(),
       kind: kind,
-      url: location.href,
+      url: safeUrl.toString(),
       viewport: { width: window.innerWidth, height: window.innerHeight },
       payload: sanitizeValue(payload),
     };
     store.uiEvents.push(entry);
     pruneBuffer(store.uiEvents, CONFIG.bufferSize.ui);
+  }
+
+  function sanitizeUrl(value) {
+    try {
+      var safeUrl = new URL(String(value), location.origin);
+      safeUrl.search = "";
+      safeUrl.hash = "";
+      return safeUrl.toString();
+    } catch (e) {
+      return "[invalid-url]";
+    }
   }
 
   function installUiEventListeners() {
@@ -480,7 +494,7 @@
       timestamp: startTime,
       type: "fetch",
       method: method.toUpperCase(),
-      url: url,
+      url: sanitizeUrl(url),
       request: {
         headers: requestHeaders,
         body: init.body ? sanitizeValue(tryParseJson(init.body)) : null,
@@ -600,7 +614,7 @@
   XMLHttpRequest.prototype.open = function (method, url) {
     this._manusData = {
       method: (method || "GET").toUpperCase(),
-      url: url,
+      url: sanitizeUrl(url),
       startTime: null,
     };
     return originalXHROpen.apply(this, arguments);

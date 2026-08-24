@@ -2,10 +2,18 @@ from cryptography.fernet import Fernet
 from app.core.config import get_settings
 
 
-def encrypt_api_key(value: str) -> str:
-    # Deployment must supply a dedicated FERNET key; this derivation keeps plaintext out of the database in the foundation.
+def _legacy_key() -> bytes:
     import base64, hashlib
-    key = base64.urlsafe_b64encode(hashlib.sha256(get_settings().jwt_secret.encode()).digest())
+    return base64.urlsafe_b64encode(hashlib.sha256(get_settings().jwt_secret.encode()).digest())
+
+
+def _configured_key() -> bytes | None:
+    value = get_settings().provider_encryption_key
+    return value.encode() if value else None
+
+
+def encrypt_api_key(value: str) -> str:
+    key = _configured_key() or _legacy_key()
     return Fernet(key).encrypt(value.encode()).decode()
 
 
@@ -17,7 +25,11 @@ def decrypt_api_key(value: str) -> str:
     - Call this only inside a backend route handler, immediately before passing the key to the provider SDK.
     - Do not cache or store the decrypted value.
     """
-    import base64, hashlib
-    key = base64.urlsafe_b64encode(hashlib.sha256(get_settings().jwt_secret.encode()).digest())
-    return Fernet(key).decrypt(value.encode()).decode()
+    configured_key = _configured_key()
+    if configured_key:
+        try:
+            return Fernet(configured_key).decrypt(value.encode()).decode()
+        except Exception:
+            return Fernet(_legacy_key()).decrypt(value.encode()).decode()
+    return Fernet(_legacy_key()).decrypt(value.encode()).decode()
 
