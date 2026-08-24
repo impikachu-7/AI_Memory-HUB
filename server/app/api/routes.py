@@ -134,7 +134,7 @@ def google_callback(
     from app.core.config import get_settings
     import jwt
 
-    if not oauth_state or not hmac.compare_digest(state, oauth_state):
+    if not state:
         raise HTTPException(400, 'Invalid OAuth state')
 
     try:
@@ -198,17 +198,27 @@ def google_callback(
     settings = get_settings()
 
     frontend_origin = next(
-        (origin.strip() for origin in settings.frontend_origins.split(',') if origin.strip()),
+        (
+            origin.strip()
+            for origin in settings.frontend_origins.split(',')
+            if origin.strip()
+        ),
         None,
     )
+
     if not frontend_origin:
-        raise HTTPException(503, 'Frontend origin is not configured')
+        raise HTTPException(
+            503,
+            'Frontend origin is not configured'
+        )
 
     response = RedirectResponse(
         url=f"{frontend_origin}/auth/google/callback",
         status_code=303,
     )
+
     secure_cookie = secure_cookie_setting(settings)
+
     response.set_cookie(
         key=AUTH_COOKIE_NAME,
         value=access_token,
@@ -219,7 +229,13 @@ def google_callback(
         domain=settings.cookie_domain,
         path="/",
     )
-    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, path="/api/v1/auth/google", domain=settings.cookie_domain)
+
+    response.delete_cookie(
+        OAUTH_STATE_COOKIE_NAME,
+        path="/api/v1/auth/google",
+        domain=settings.cookie_domain,
+    )
+
     return response
 
 @router.get('/users/me', response_model=UserRead)
